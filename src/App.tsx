@@ -247,9 +247,12 @@ export default function App() {
     setScanLogs(initLogs);
 
     try {
-      const res = await fetch('/api/scan', {
+      const res = await fetch('/api/scan?stream=true', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
         body: JSON.stringify({
           targetUrl,
           templateIds: selectedTemplateIds,
@@ -263,17 +266,67 @@ export default function App() {
         throw new Error(errData.error || `HTTP ${res.status}`);
       }
 
-      const result: ScanResult = await res.json();
-      setCurrentScanResult(result);
-      if (visualSettings.enableSoundFx) {
-        if (result.findings && result.findings.length > 0) {
-          cyberSound.playPing('alert', visualSettings.soundVolume);
-        } else {
-          cyberSound.playPing('success', visualSettings.soundVolume);
+      // Check if server returned streaming response (Event-Stream)
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('text/event-stream') && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+
+          for (const part of parts) {
+            const trimmed = part.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const payloadStr = trimmed.replace(/^data:\s*/, '');
+            try {
+              const event = JSON.parse(payloadStr);
+              if (event.type === 'log' && event.log) {
+                setScanLogs(prev => [...prev, event.log]);
+                if (visualSettings.enableSoundFx) {
+                  if (event.log.level === 'crit' || event.log.level === 'warn') {
+                    cyberSound.playPing('alert', visualSettings.soundVolume * 0.4);
+                  }
+                }
+              } else if (event.type === 'complete' && event.result) {
+                const finalResult: ScanResult = event.result;
+                setCurrentScanResult(finalResult);
+                if (visualSettings.enableSoundFx) {
+                  if (finalResult.findings && finalResult.findings.length > 0) {
+                    cyberSound.playPing('alert', visualSettings.soundVolume);
+                  } else {
+                    cyberSound.playPing('success', visualSettings.soundVolume);
+                  }
+                }
+                if (finalResult.logs && finalResult.logs.length > 0) {
+                  setScanLogs(finalResult.logs);
+                }
+              }
+            } catch {
+              // Ignore incomplete JSON stream chunk
+            }
+          }
         }
-      }
-      if (result.logs && result.logs.length > 0) {
-        setScanLogs(result.logs);
+      } else {
+        // Fallback for non-streaming response
+        const result: ScanResult = await res.json();
+        setCurrentScanResult(result);
+        if (visualSettings.enableSoundFx) {
+          if (result.findings && result.findings.length > 0) {
+            cyberSound.playPing('alert', visualSettings.soundVolume);
+          } else {
+            cyberSound.playPing('success', visualSettings.soundVolume);
+          }
+        }
+        if (result.logs && result.logs.length > 0) {
+          setScanLogs(result.logs);
+        }
       }
     } catch (err: any) {
       if (visualSettings.enableSoundFx) {

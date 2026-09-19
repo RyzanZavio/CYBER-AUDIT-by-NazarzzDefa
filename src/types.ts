@@ -45,12 +45,27 @@ export interface YamlTemplate {
   author?: string;
 }
 
+export interface ScanPayloadInfo {
+  method: string;
+  url: string;
+  headers?: Record<string, string>;
+  body?: string;
+  statusCode?: number;
+  responseTimeMs?: number;
+  matched?: boolean;
+  evidence?: string;
+  matchersCondition?: string;
+}
+
 export interface ScanLog {
+  id?: string;
   timestamp: string;
   level: 'info' | 'warn' | 'crit' | 'pass';
   message: string;
   templateId?: string;
+  templateName?: string;
   severity?: VulnerabilitySeverity;
+  payload?: ScanPayloadInfo;
 }
 
 export interface ScanResult {
@@ -64,6 +79,10 @@ export interface ScanResult {
   templatesExecuted: number;
   requestsSent: number;
   logs: ScanLog[];
+  accuracyScore?: number;
+  accuracyLevel?: string;
+  detectedTechnologies?: string[];
+  cveMatchedCount?: number;
 }
 
 export interface WebhookConfig {
@@ -166,4 +185,31 @@ export interface VisualSettings {
   soundVolume: number; // 0 to 100
   reducedMotion: boolean;
 }
+
+export interface CveEntry {
+  cveId: string;
+  name: string;
+  cvssScore: number;
+  severity: VulnerabilitySeverity;
+  cweId: string;
+  owaspCategory: string;
+  affectedTech: string;
+  description: string;
+  vector: string;
+  remediation: string;
+  referenceUrl: string;
+  publishedDate: string;
+  isKev?: boolean; // CISA Known Exploited Vulnerability
+  accuracyRate: number; // e.g. 99.2%
+  templateId?: string;
+  detectionAvailable: boolean;
+}
+
+export interface CveAccuracyConfig {
+  enableAntiFalsePositive: boolean;
+  enableTechFingerprinting: boolean;
+  minConfidenceThreshold: number;
+  autoPrioritizeKev: boolean;
+}
+
 
