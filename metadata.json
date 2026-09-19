@@ -1,0 +1,6 @@
+{
+  "name": "Cybersecurity Vulnerability Audit Scanner",
+  "description": "OWASP, Nuclei, and Burp Suite inspired security auditing tool with YAML automation templates, PDF reports, Discord/Slack webhooks, Linux/WSL CLI, daily scheduled scans, Subfinder drag-and-drop batch scanning, modular extension packs, and upstream proxy configuration (Burp Suite, OWASP ZAP, Tor).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
