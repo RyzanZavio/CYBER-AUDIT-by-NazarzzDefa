@@ -135,6 +135,45 @@ async function startServer() {
 
       console.log(`[Scan] Starting scan on target: ${targetUrl} with ${templatesToRun.length} templates (Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'})`);
 
+      const isStreaming = req.headers.accept?.includes('text/event-stream') || req.query.stream === 'true' || req.path.endsWith('/stream');
+
+      if (isStreaming) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders?.();
+
+        const result = await executeVulnerabilityScan(targetUrl, templatesToRun, {
+          timeoutMs: timeoutMs || 8000,
+          userAgent: 'DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)',
+          proxy: effectiveProxy,
+          onProgressLog: (log) => {
+            res.write(`data: ${JSON.stringify({ type: 'log', log })}\n\n`);
+          },
+        });
+
+        lastScanResult = result;
+
+        // Handle webhook notification if configured
+        const effectiveWebhook: WebhookConfig = webhook || currentWebhookConfig;
+        if (effectiveWebhook && effectiveWebhook.enabled && effectiveWebhook.url) {
+          const severityOrder = ['info', 'low', 'medium', 'high', 'critical'];
+          const thresholdIndex = severityOrder.indexOf(effectiveWebhook.minSeverity || 'medium');
+          const hasRelevantFindings = result.findings.some(
+            f => severityOrder.indexOf(f.severity) >= thresholdIndex
+          );
+          if (hasRelevantFindings || result.findings.length === 0) {
+            sendWebhookNotification(effectiveWebhook, result).catch(err => {
+              console.error('[Webhook] Scan dispatch error:', err);
+            });
+          }
+        }
+
+        res.write(`data: ${JSON.stringify({ type: 'complete', result })}\n\n`);
+        res.end();
+        return;
+      }
+
       const result = await executeVulnerabilityScan(targetUrl, templatesToRun, {
         timeoutMs: timeoutMs || 8000,
         userAgent: 'DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)',

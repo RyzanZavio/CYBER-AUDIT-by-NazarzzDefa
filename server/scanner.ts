@@ -94,13 +94,23 @@ export async function executeVulnerabilityScan(
   let requestsSent = 0;
   let templatesExecuted = 0;
 
-  const emitLog = (level: 'info' | 'warn' | 'crit' | 'pass', message: string, templateId?: string, severity?: VulnerabilitySeverity) => {
+  const emitLog = (
+    level: 'info' | 'warn' | 'crit' | 'pass',
+    message: string,
+    templateId?: string,
+    severity?: VulnerabilitySeverity,
+    templateName?: string,
+    payload?: import('../src/types').ScanPayloadInfo
+  ) => {
     const entry: ScanLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       timestamp: new Date().toLocaleTimeString(),
       level,
       message,
       templateId,
+      templateName,
       severity,
+      payload,
     };
     logs.push(entry);
     if (options.onProgressLog) {
@@ -134,7 +144,7 @@ export async function executeVulnerabilityScan(
     const description = parsed?.info?.description || tpl.description;
     const references = parsed?.info?.reference || [];
 
-    emitLog('info', `[${tpl.id}] Executing audit: "${tplName}"`, tpl.id);
+    emitLog('info', `[${tpl.id}] Executing audit: "${tplName}"`, tpl.id, undefined, tplName);
 
     const requests = parsed.requests || [];
     for (const reqConfig of requests) {
@@ -155,6 +165,21 @@ export async function executeVulnerabilityScan(
           const authString = `${options.proxy.username}:${options.proxy.password || ''}`;
           requestHeaders['Proxy-Authorization'] = `Basic ${Buffer.from(authString).toString('base64')}`;
         }
+
+        // Emit real-time log for payload dispatch
+        emitLog(
+          'info',
+          `[PROBE] Transmitting ${method} ${fullUrl}`,
+          tpl.id,
+          undefined,
+          tplName,
+          {
+            method,
+            url: fullUrl,
+            headers: requestHeaders,
+            body: reqConfig.body,
+          }
+        );
 
         let responseStatusCode = 0;
         let responseHeaders: Record<string, string> = {};
@@ -337,10 +362,39 @@ export async function executeVulnerabilityScan(
             logSeverityLevel,
             `[${tplSeverity.toUpperCase()}] [${tpl.id}] Found: "${tplName}" at ${fullUrl}`,
             tpl.id,
-            tplSeverity
+            tplSeverity,
+            tplName,
+            {
+              method,
+              url: fullUrl,
+              headers: requestHeaders,
+              body: reqConfig.body,
+              statusCode: responseStatusCode,
+              responseTimeMs,
+              matched: true,
+              evidence: matchedEvidence.trim() || 'Triggered matching conditions',
+              matchersCondition,
+            }
           );
         } else {
-          emitLog('pass', `[PASS] [${tpl.id}] No vulnerabilities detected on ${fullUrl}`, tpl.id);
+          emitLog(
+            'pass',
+            `[PASS] [${tpl.id}] Passed on ${fullUrl} (HTTP ${responseStatusCode}, ${responseTimeMs}ms)`,
+            tpl.id,
+            undefined,
+            tplName,
+            {
+              method,
+              url: fullUrl,
+              headers: requestHeaders,
+              body: reqConfig.body,
+              statusCode: responseStatusCode,
+              responseTimeMs,
+              matched: false,
+              evidence: 'No vulnerable signature or misconfiguration detected.',
+              matchersCondition,
+            }
+          );
         }
       }
     }

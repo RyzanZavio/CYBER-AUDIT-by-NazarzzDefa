@@ -86,21 +86,36 @@
 
 ## 💻 Panduan Instalasi & Menjalankan Aplikasi
 
-### ⚡ Cara Termudah: 1-Click Setup (Otomatis & Global)
-Di dalam folder proyek, jalankan skrip setup berikut:
+### 📥 1. Klon Repositori (Git Clone)
+Buka terminal Anda (misal di Home direktori `~`), lalu klon repositori dan masuk ke dalam folder proyek:
+```bash
+git clone https://github.com/rayzanzavio/cybersecurity-vulnerability-audit-scanner.git
+cd cybersecurity-vulnerability-audit-scanner
+```
+
+---
+
+### ⚡ 2. Cara Termudah: 1-Click Setup (Otomatis & Global)
+Setelah masuk ke folder hasil git clone di atas, jalankan skrip setup berikut:
 ```bash
 chmod +x setup.sh && ./setup.sh
 ```
 Skrip ini akan secara otomatis:
 1. Memasang seluruh dependensi tanpa konflik versi (`--legacy-peer-deps`).
 2. Mendaftarkan perintah **`cyber-audit`** dan **`cyber-audit-web`** ke `/usr/local/bin` (PATH sistem).
-3. **Kamu bisa langsung memanggilnya dari direktori mana saja (termasuk Home `~`) tanpa harus masuk ke folder ini lagi!**
+3. **Kamu bisa langsung memanggilnya dari direktori mana saja (termasuk Home `~`) tanpa harus masuk ke folder git clone ini lagi!**
 
 ---
 
-### Cara Manual (Langkah demi Langkah)
+### 🛠 Cara Manual (Langkah demi Langkah)
 
-#### 1. Pasang Dependensi
+#### 1. Klon Repositori & Masuk Folder
+```bash
+git clone https://github.com/rayzanzavio/cybersecurity-vulnerability-audit-scanner.git
+cd cybersecurity-vulnerability-audit-scanner
+```
+
+#### 2. Pasang Dependensi
 > **Catatan jika muncul error `npm ERR! code ERESOLVE`**:
 > Error ini terjadi karena NPM versi baru memberlakukan pemeriksaan versi peer dependency yang ketat antara `vite` dan `esbuild`. Untuk mengatasinya, gunakan flag `--legacy-peer-deps`:
 ```bash
@@ -108,14 +123,14 @@ npm install --legacy-peer-deps
 ```
 *(File `.npmrc` juga sudah disertakan dalam repositori ini agar `npm install` biasa otomatis mengabaikan konflik peer).*
 
-#### 2. Jalankan Web GUI (Development)
+#### 3. Jalankan Web GUI (Development)
 ```bash
 npm run dev
 ```
 Aplikasi akan aktif dan dapat diakses di peramban pada:
 `http://localhost:3000`
 
-#### 3. Memanggil dari Home Direktori (`~`) atau Mana Saja
+#### 4. Memanggil dari Home Direktori (`~`) atau Mana Saja
 Setelah menjalankan `./setup.sh`, kamu bisa membuka terminal di folder mana pun (misal di Home `~`):
 - **Menyalakan Web GUI**:
   ```bash
@@ -130,7 +145,7 @@ Setelah menjalankan `./setup.sh`, kamu bisa membuka terminal di folder mana pun 
   cyber-audit -l subdomains.txt -x http://127.0.0.1:8080
   ```
 
-#### 4. Build dan Jalankan untuk Produksi (Opsional)
+#### 5. Build dan Jalankan untuk Produksi (Opsional)
 ```bash
 npm run build
 npm start
