@@ -30,6 +30,7 @@ import {
   WebhookConfig,
   YamlTemplate,
 } from './types';
+import { WorkbenchView } from './components/WorkbenchView';
 import { TerminalView } from './components/TerminalView';
 import { ScannerPanel } from './components/ScannerPanel';
 import { FindingsList } from './components/FindingsList';
@@ -44,6 +45,7 @@ import { cyberSound } from './utils/cyberSound';
 import { generatePdfReport } from './utils/pdfGenerator';
 
 type TabId =
+  | 'workbench'
   | 'scanner'
   | 'batch'
   | 'findings'
@@ -57,8 +59,8 @@ type TabId =
 const DEFAULT_VISUAL_SETTINGS: VisualSettings = {
   theme: 'cyber-slate',
   accent: 'cyan',
-  fontFamily: 'sans',
-  density: 'normal',
+  fontFamily: 'mono',
+  density: 'compact',
   fontSizeScale: 100,
   enableScanlines: false,
   scanlineIntensity: 2,
@@ -70,7 +72,7 @@ const DEFAULT_VISUAL_SETTINGS: VisualSettings = {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>('scanner');
+  const [activeTab, setActiveTab] = useState<TabId>('workbench');
   const [isVisualCustomizerOpen, setIsVisualCustomizerOpen] = useState(false);
   const [visualSettings, setVisualSettings] = useState<VisualSettings>(() => {
     if (typeof window !== 'undefined') {
@@ -632,31 +634,47 @@ export default function App() {
         </div>
 
         {/* Tab Navigation Menu */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 overflow-x-auto scrollbar-none border-t border-slate-800/80">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 overflow-x-auto scrollbar-none border-t border-slate-800/80 font-mono text-xs">
+          <button
+            id="tab-workbench-btn"
+            onClick={() => handleTabChange('workbench')}
+            className={`px-3.5 py-2.5 text-xs font-semibold border-b-2 whitespace-nowrap transition flex items-center gap-1.5 ${
+              activeTab === 'workbench'
+                ? 'border-cyan-400 text-cyan-400 bg-cyan-950/20'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Workbench (Split-Pane)</span>
+            <span className="px-1 py-0.2 rounded-none text-[9px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-700">
+              PRO
+            </span>
+          </button>
+
           <button
             id="tab-scanner-btn"
             onClick={() => handleTabChange('scanner')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+            className={`px-3.5 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
               activeTab === 'scanner'
                 ? 'border-cyan-400 text-cyan-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Terminal className="w-4 h-4" />
-            <span>Target Scanner &amp; Terminal</span>
+            <Terminal className="w-3.5 h-3.5" />
+            <span>Target Scanner</span>
           </button>
 
           <button
             id="tab-batch-btn"
             onClick={() => handleTabChange('batch')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+            className={`px-3.5 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
               activeTab === 'batch'
                 ? 'border-cyan-400 text-cyan-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Layers className="w-4 h-4" />
-            <span>Subfinder &amp; File Import</span>
+            <Layers className="w-3.5 h-3.5" />
+            <span>Subfinder &amp; Import</span>
             <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-cyan-950 text-cyan-400 border border-cyan-800">
               RECON
             </span>
@@ -665,13 +683,13 @@ export default function App() {
           <button
             id="tab-findings-btn"
             onClick={() => handleTabChange('findings')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+            className={`px-3.5 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
               activeTab === 'findings'
                 ? 'border-cyan-400 text-cyan-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <AlertTriangle className="w-4 h-4" />
+            <AlertTriangle className="w-3.5 h-3.5" />
             <span>Audit Findings</span>
             {findingsCount > 0 && (
               <span
@@ -689,40 +707,40 @@ export default function App() {
           <button
             id="tab-templates-btn"
             onClick={() => handleTabChange('templates')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+            className={`px-3.5 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
               activeTab === 'templates'
                 ? 'border-cyan-400 text-cyan-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <FileCode className="w-4 h-4" />
-            <span>YAML Templates ({templates.length})</span>
+            <FileCode className="w-3.5 h-3.5" />
+            <span>YAML ({templates.length})</span>
           </button>
 
           <button
             id="tab-extensions-btn"
             onClick={() => handleTabChange('extensions')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+            className={`px-3.5 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
               activeTab === 'extensions'
                 ? 'border-cyan-400 text-cyan-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Package className="w-4 h-4" />
+            <Package className="w-3.5 h-3.5" />
             <span>Extensions ({extensions.filter(e => e.enabled).length})</span>
           </button>
 
           <button
             id="tab-proxy-btn"
             onClick={() => handleTabChange('proxy')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+            className={`px-3.5 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
               activeTab === 'proxy'
                 ? 'border-cyan-400 text-cyan-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Radio className="w-4 h-4" />
-            <span>Proxy &amp; Tor</span>
+            <Radio className="w-3.5 h-3.5" />
+            <span>Proxy</span>
             {proxyConfig.enabled && (
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
             )}
@@ -731,49 +749,60 @@ export default function App() {
           <button
             id="tab-webhook-btn"
             onClick={() => handleTabChange('webhook')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+            className={`px-3.5 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
               activeTab === 'webhook'
                 ? 'border-cyan-400 text-cyan-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Bell className="w-4 h-4" />
+            <Bell className="w-3.5 h-3.5" />
             <span>Webhooks</span>
           </button>
 
           <button
             id="tab-scheduler-btn"
             onClick={() => handleTabChange('scheduler')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+            className={`px-3.5 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
               activeTab === 'scheduler'
                 ? 'border-cyan-400 text-cyan-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Clock className="w-4 h-4" />
+            <Clock className="w-3.5 h-3.5" />
             <span>Schedule &amp; CLI</span>
           </button>
 
           <button
             id="tab-visual-btn"
             onClick={() => handleTabChange('visual')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+            className={`px-3.5 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
               activeTab === 'visual'
                 ? 'border-cyan-400 text-cyan-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Palette className="w-4 h-4 text-cyan-400" />
-            <span>Sesuaikan Visual</span>
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-cyan-950 text-cyan-400 border border-cyan-800">
-              GAYA
-            </span>
+            <Palette className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Visual</span>
           </button>
         </div>
       </header>
 
       {/* Main Container Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 lg:p-6 space-y-4">
+        {/* Tab 0: High-Density Workbench Split-View */}
+        {activeTab === 'workbench' && (
+          <WorkbenchView
+            scan={currentScanResult}
+            logs={scanLogs}
+            isScanning={isScanning}
+            templates={templates}
+            proxyConfig={proxyConfig}
+            onStartScan={handleStartScan}
+            onQuickRun={handleQuickRun}
+            onClearLogs={() => setScanLogs([])}
+          />
+        )}
+
         {/* Tab 1: Scanner & Terminal */}
         {activeTab === 'scanner' && (
           <div className="space-y-6">

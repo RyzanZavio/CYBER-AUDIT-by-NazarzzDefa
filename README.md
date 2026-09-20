@@ -58,40 +58,32 @@ Pilih salah satu lingkungan yang paling nyaman untuk Anda:
 
 ## 🛠 Setup & Instalasi Dependensi
 
-Jika Anda merasa `npm` sering mengalami konflik versi atau memakan waktu lama, gunakan opsi **Python** atau **Bun** di bawah ini:
+Pilihlah salah satu cara termudah berikut untuk memasang dependensi tanpa kerumitan:
 
-### Opsi A: Python CLI (Paling Ringkas & Bebas Ribet)
-Jika Anda hanya ingin melakukan scanning langsung dari terminal tanpa menjalankan server web:
+### ⚡ Opsi 1: `make install` (Rekomendasi Utama)
+Dengan satu perintah, Makefile akan secara otomatis menginstal dependensi Python (`requirements.txt`) dan dependensi Web GUI (`Bun`/`pnpm`/`npm`):
 
-1. Pastikan Python 3 dan pip sudah terpasang:
-   ```bash
-   python3 --version
-   ```
+```bash
+make install
+```
 
-2. Pasang dependensi dari berkas `requirements.txt` atau via `pyproject.toml`:
-   ```bash
-   # Menggunakan requirements.txt
-   pip install -r requirements.txt
-
-   # Atau pasang sebagai paket lokal yang dapat dieksekusi secara global
-   pip install .
-   ```
-
-3. Jalankan pemindaian langsung:
-   ```bash
-   python3 cyber_audit.py -u https://example.com
-   ```
+Perintah Makefile lainnya yang tersedia:
+```bash
+make setup      # Menjalankan 1-click global setup & alias
+make dev        # Menjalankan Web GUI di http://localhost:3000
+make scan TARGET=https://example.com SEVERITY=high
+```
 
 ---
 
-### Opsi B: 1-Click Setup Skrip (Otomatis Global)
+### 🚀 Opsi 2: 1-Click Setup Skrip (`setup.sh`)
 Skrip `setup.sh` akan mendeteksi lingkungan Anda secara otomatis (Python/Bun/NPM), memasang dependensi, dan mendaftarkan perintah global `cyber-audit` serta `cyber-audit-web` ke sistem PATH.
 
 ```bash
 chmod +x setup.sh && ./setup.sh
 ```
 
-Setelah dijalankan, Anda dapat langsung mengetikkan perintah ini dari folder mana saja (termasuk Home `~`):
+Setelah dijalankan, Anda dapat langsung mengetikkan perintah ini dari folder mana saja:
 ```bash
 # Menjalankan Web GUI
 cyber-audit-web
@@ -102,7 +94,22 @@ cyber-audit -u https://example.com -p high
 
 ---
 
-### Opsi C: Bun (Instalasi Kilat untuk Web GUI)
+### 🐍 Opsi 3: Python CLI Murni (Tanpa Node/NPM)
+Jika Anda hanya ingin melakukan scanning langsung dari terminal tanpa menjalankan server web:
+
+1. Pasang dependensi dari berkas `requirements.txt`:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Jalankan pemindaian langsung:
+   ```bash
+   python3 cyber_audit.py -u https://example.com
+   ```
+
+---
+
+### ⚡ Opsi 4: Bun (Instalasi Kilat untuk Web GUI)
 Jika Anda ingin menjalankan Web GUI tanpa beban NPM:
 
 ```bash
@@ -116,7 +123,7 @@ Akses di peramban: `http://localhost:3000`
 
 ---
 
-### Opsi D: NPM Tradisional
+### 📦 Opsi 5: NPM Tradisional
 Jika Anda tetap ingin menggunakan NPM:
 
 ```bash

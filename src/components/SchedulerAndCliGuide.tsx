@@ -27,7 +27,7 @@ interface SchedulerAndCliGuideProps {
   onTriggerManualScan?: () => void;
 }
 
-type CliMethod = 'python' | 'bun' | 'wget' | 'git' | 'curl' | 'cron' | 'cicd';
+type CliMethod = 'make' | 'python' | 'bun' | 'wget' | 'git' | 'curl' | 'cron' | 'cicd';
 
 export const SchedulerAndCliGuide: React.FC<SchedulerAndCliGuideProps> = ({
   schedule,
@@ -39,7 +39,7 @@ export const SchedulerAndCliGuide: React.FC<SchedulerAndCliGuideProps> = ({
   const [formSchedule, setFormSchedule] = useState<ScheduleConfig>(schedule);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState<CliMethod>('python');
+  const [selectedMethod, setSelectedMethod] = useState<CliMethod>('make');
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -257,6 +257,17 @@ jobs:
             <div className="flex flex-wrap gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-mono">
               <button
                 type="button"
+                onClick={() => setSelectedMethod('make')}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition ${
+                  selectedMethod === 'make'
+                    ? 'bg-cyan-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Make (make install)
+              </button>
+              <button
+                type="button"
                 onClick={() => setSelectedMethod('python')}
                 className={`px-3 py-1.5 rounded-lg font-semibold transition ${
                   selectedMethod === 'python'
@@ -333,6 +344,87 @@ jobs:
                 CI/CD Action
               </button>
             </div>
+
+            {/* METHOD -1: MAKEFILE */}
+            {selectedMethod === 'make' && (
+              <div className="space-y-3">
+                <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-300">
+                  <span className="font-semibold text-white">Streamlined Makefile Commands:</span> Single command setup, audit execution, and web dashboard launcher.
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">
+                      1. One-step dependency install (Python &amp; Web):
+                    </span>
+                    <button
+                      onClick={() => handleCopy('make install', 'make-inst')}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono"
+                    >
+                      {copiedSection === 'make-inst' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedSection === 'make-inst' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[12px] font-mono text-cyan-300 overflow-x-auto select-all font-bold">
+                    make install
+                  </pre>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">
+                      2. One-click global setup (registers cyber-audit binary):
+                    </span>
+                    <button
+                      onClick={() => handleCopy('make setup', 'make-set')}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono"
+                    >
+                      {copiedSection === 'make-set' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedSection === 'make-set' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-emerald-300 overflow-x-auto select-all">
+                    make setup
+                  </pre>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">
+                      3. Quick CLI target audit:
+                    </span>
+                    <button
+                      onClick={() => handleCopy(`make scan TARGET=${targetDemo} SEVERITY=high`, 'make-sc')}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono"
+                    >
+                      {copiedSection === 'make-sc' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedSection === 'make-sc' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-amber-300/90 overflow-x-auto select-all">
+                    make scan TARGET={targetDemo} SEVERITY=high
+                  </pre>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">
+                      4. Start Web GUI server:
+                    </span>
+                    <button
+                      onClick={() => handleCopy('make run', 'make-r')}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono"
+                    >
+                      {copiedSection === 'make-r' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedSection === 'make-r' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto select-all">
+                    make run
+                  </pre>
+                </div>
+              </div>
+            )}
 
             {/* METHOD 0: PYTHON & PIP */}
             {selectedMethod === 'python' && (
