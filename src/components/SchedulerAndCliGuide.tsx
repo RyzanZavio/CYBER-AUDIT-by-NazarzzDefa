@@ -27,7 +27,7 @@ interface SchedulerAndCliGuideProps {
   onTriggerManualScan?: () => void;
 }
 
-type CliMethod = 'wget' | 'git' | 'curl' | 'cron' | 'cicd';
+type CliMethod = 'python' | 'bun' | 'wget' | 'git' | 'curl' | 'cron' | 'cicd';
 
 export const SchedulerAndCliGuide: React.FC<SchedulerAndCliGuideProps> = ({
   schedule,
@@ -39,7 +39,7 @@ export const SchedulerAndCliGuide: React.FC<SchedulerAndCliGuideProps> = ({
   const [formSchedule, setFormSchedule] = useState<ScheduleConfig>(schedule);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState<CliMethod>('wget');
+  const [selectedMethod, setSelectedMethod] = useState<CliMethod>('python');
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -257,6 +257,28 @@ jobs:
             <div className="flex flex-wrap gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-mono">
               <button
                 type="button"
+                onClick={() => setSelectedMethod('python')}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition ${
+                  selectedMethod === 'python'
+                    ? 'bg-cyan-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Python &amp; pip
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedMethod('bun')}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition ${
+                  selectedMethod === 'bun'
+                    ? 'bg-cyan-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Bun (Fast)
+              </button>
+              <button
+                type="button"
                 onClick={() => setSelectedMethod('wget')}
                 className={`px-3 py-1.5 rounded-lg font-semibold transition ${
                   selectedMethod === 'wget'
@@ -311,6 +333,96 @@ jobs:
                 CI/CD Action
               </button>
             </div>
+
+            {/* METHOD 0: PYTHON & PIP */}
+            {selectedMethod === 'python' && (
+              <div className="space-y-3">
+                <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-300">
+                  <span className="font-semibold text-white">Standalone Python 3 CLI (No NPM Required):</span> Clean, zero-friction scanning engine powered by <code className="text-cyan-300">requirements.txt</code> or <code className="text-cyan-300">pyproject.toml</code>.
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">
+                      1. Install dependencies via requirements.txt:
+                    </span>
+                    <button
+                      onClick={() => handleCopy('pip install -r requirements.txt', 'pip-install')}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono"
+                    >
+                      {copiedSection === 'pip-install' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedSection === 'pip-install' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-cyan-300 overflow-x-auto select-all">
+                    pip install -r requirements.txt
+                  </pre>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">
+                      2. Execute scan against target host:
+                    </span>
+                    <button
+                      onClick={() => handleCopy(`python3 cyber_audit.py -u ${targetDemo} -p high`, 'py-run')}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono"
+                    >
+                      {copiedSection === 'py-run' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedSection === 'py-run' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[12px] font-mono text-emerald-300 overflow-x-auto select-all font-bold">
+                    python3 cyber_audit.py -u {targetDemo} -p high
+                  </pre>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">
+                      3. Subfinder recon list + Burp Suite proxy:
+                    </span>
+                    <button
+                      onClick={() => handleCopy('python3 cyber_audit.py -l subdomains.txt -x http://127.0.0.1:8080 -o report.json', 'py-batch')}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono"
+                    >
+                      {copiedSection === 'py-batch' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedSection === 'py-batch' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[10px] font-mono text-amber-300/90 overflow-x-auto select-all">
+                    python3 cyber_audit.py -l subdomains.txt -x http://127.0.0.1:8080 -o report.json
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            {/* METHOD 0.5: BUN */}
+            {selectedMethod === 'bun' && (
+              <div className="space-y-3">
+                <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-300">
+                  <span className="font-semibold text-white">Bun Runtime (Ultra-fast Node.js Alternative):</span> Installs all packages in ~1 second with zero peer dependency conflicts.
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">
+                      Instant Installation &amp; Launch:
+                    </span>
+                    <button
+                      onClick={() => handleCopy('bun install && bun run dev', 'bun-run')}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono"
+                    >
+                      {copiedSection === 'bun-run' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedSection === 'bun-run' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[12px] font-mono text-emerald-300 overflow-x-auto select-all font-bold">
+                    bun install && bun run dev
+                  </pre>
+                </div>
+              </div>
+            )}
 
             {/* METHOD 1: WGET */}
             {selectedMethod === 'wget' && (

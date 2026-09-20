@@ -3,24 +3,24 @@ import { YamlTemplate } from '../types';
 export const DEFAULT_TEMPLATES: YamlTemplate[] = [
   {
     id: 'owasp-security-headers',
-    name: 'OWASP Missing Security Headers Check',
-    severity: 'medium',
-    description: 'Inspects HTTP response headers for missing security controls including HSTS, Content-Security-Policy, X-Frame-Options, and X-Content-Type-Options.',
-    tags: ['owasp', 'headers', 'misconfiguration', 'burp-passive'],
+    name: 'Missing Defensive HTTP Security Headers',
+    severity: 'low',
+    description: 'Audits crucial defense-in-depth HTTP security headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options: nosniff, Strict-Transport-Security).',
+    tags: ['owasp', 'headers', 'defense-in-depth', 'burp-passive', 'hardening'],
     enabled: true,
     isBuiltin: true,
     rawYaml: `id: owasp-security-headers
 info:
-  name: Missing Security Headers Audit
+  name: Missing Defensive HTTP Security Headers
   author: devsecops
-  severity: medium
-  description: Verifies crucial defensive HTTP security headers to prevent Clickjacking, MIME-sniffing, and Cross-Site Scripting (XSS).
+  severity: low
+  description: Verifies crucial defensive HTTP security headers to prevent Clickjacking, MIME-sniffing, SSL downgrade, and Cross-Site Scripting (XSS).
   reference:
     - https://owasp.org/www-project-secure-headers/
     - https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html
-  tags: owasp,headers,burp-passive,defense
+  tags: owasp,headers,defense-in-depth,hardening
   classification:
-    cvss-score: 5.3
+    cvss-score: 3.1
     cwe-id: CWE-693
     owasp-category: A05:2021-Security Misconfiguration
 
@@ -74,7 +74,7 @@ info:
     - https://owasp.org/www-project-top-ten/2017/A3_2017-Sensitive_Data_Exposure
   tags: exposure,credentials,cve,critical
   classification:
-    cvss-score: 9.8
+    cvss-score: 9.1
     cwe-id: CWE-200
     owasp-category: A01:2021-Broken Access Control
 
@@ -118,7 +118,7 @@ info:
     - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/05-Enumerate_Infrastructure_and_Application_Admin_Interfaces
   tags: git,exposure,vulnerability
   classification:
-    cvss-score: 8.2
+    cvss-score: 7.5
     cwe-id: CWE-538
     owasp-category: A05:2021-Security Misconfiguration
 
@@ -143,7 +143,7 @@ requests:
   {
     id: 'cors-misconfiguration',
     name: 'CORS Wildcard & Arbitrary Origin Audit',
-    severity: 'high',
+    severity: 'medium',
     description: 'Audits Cross-Origin Resource Sharing (CORS) policy for wildcard origin reflection and credentials leakage.',
     tags: ['cors', 'burp-active', 'owasp'],
     enabled: true,
@@ -152,13 +152,13 @@ requests:
 info:
   name: Overly Permissive CORS Policy
   author: burp-scanner
-  severity: high
+  severity: medium
   description: Insecure CORS configuration with wildcard (*) or arbitrary reflected Origin header with credentials enabled allows cross-site data theft.
   reference:
     - https://portswigger.net/web-security/cors
   tags: cors,burp-active,data-theft
   classification:
-    cvss-score: 7.5
+    cvss-score: 5.3
     cwe-id: CWE-346
     owasp-category: A01:2021-Broken Access Control
 
@@ -181,8 +181,8 @@ requests:
   {
     id: 'server-version-disclosure',
     name: 'Verbose Server & Tech Stack Fingerprint',
-    severity: 'low',
-    description: 'Detects detailed server banner headers (Server, X-Powered-By, X-AspNet-Version) revealing framework versions to potential attackers.',
+    severity: 'info',
+    description: 'Detects detailed server banner headers (Server, X-Powered-By, X-AspNet-Version) revealing framework versions.',
     tags: ['fingerprint', 'information-disclosure', 'burp-passive'],
     enabled: true,
     isBuiltin: true,
@@ -190,13 +190,13 @@ requests:
 info:
   name: Detailed Server Banner Disclosure
   author: owasp-zap
-  severity: low
-  description: Web servers often disclose exact operating system and software package versions, facilitating vulnerability research for attackers.
+  severity: info
+  description: Web servers often disclose exact operating system and software package versions, facilitating reconnaissance for attackers.
   reference:
     - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server
   tags: fingerprint,banner,disclosure
   classification:
-    cvss-score: 3.7
+    cvss-score: 0.0
     cwe-id: CWE-200
     owasp-category: A05:2021-Security Misconfiguration
 
@@ -233,7 +233,7 @@ info:
     - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/01-Conduct_Search_Engine_Discovery_Reconnaissance_for_Information_Leakage
   tags: robots,recon,disclosure
   classification:
-    cvss-score: 2.1
+    cvss-score: 0.0
     cwe-id: CWE-200
     owasp-category: A05:2021-Security Misconfiguration
 
@@ -257,8 +257,8 @@ requests:
   {
     id: 'cookie-security-flags',
     name: 'Insecure Session Cookie Flags (HttpOnly/Secure)',
-    severity: 'medium',
-    description: 'Audits Set-Cookie headers for missing HttpOnly, Secure, and SameSite flags that prevent session hijacking.',
+    severity: 'low',
+    description: 'Audits Set-Cookie headers for missing HttpOnly, Secure, and SameSite flags that protect session cookies.',
     tags: ['cookies', 'session', 'owasp', 'burp-passive'],
     enabled: true,
     isBuiltin: true,
@@ -266,14 +266,14 @@ requests:
 info:
   name: Insecure Session Cookie Flags
   author: burp-scanner
-  severity: medium
+  severity: low
   description: Cookies lacking the HttpOnly flag can be stolen via Cross-Site Scripting (XSS). Cookies missing Secure flag can be intercepted over cleartext HTTP.
   reference:
     - https://owasp.org/www-community/controls/SecureFlag
     - https://owasp.org/www-community/HttpOnly
   tags: cookies,session,hijacking
   classification:
-    cvss-score: 5.4
+    cvss-score: 3.1
     cwe-id: CWE-614
     owasp-category: A07:2021-Identification and Authentication Failures
 
@@ -315,7 +315,7 @@ info:
     - https://owasp.org/www-community/attacks/SQL_Injection
   tags: sqli,injection,burp-active
   classification:
-    cvss-score: 8.5
+    cvss-score: 7.5
     cwe-id: CWE-89
     owasp-category: A03:2021-Injection
 
@@ -341,7 +341,7 @@ requests:
   {
     id: 'xss-reflection-passive',
     name: 'Unsanitized Reflected Parameter Canary (XSS)',
-    severity: 'high',
+    severity: 'medium',
     description: 'Tests if user-supplied query parameters are reflected verbatim without HTML entity escaping into the DOM response.',
     tags: ['xss', 'injection', 'reflection', 'burp-active'],
     enabled: true,
@@ -350,13 +350,13 @@ requests:
 info:
   name: Reflected Input Parameter Without Sanitization
   author: burp-scanner
-  severity: high
+  severity: medium
   description: Parameters reflected without proper context-aware sanitization can lead to Cross-Site Scripting (XSS) and session hijacking.
   reference:
     - https://owasp.org/www-community/attacks/xss/
   tags: xss,injection,burp-active
   classification:
-    cvss-score: 7.2
+    cvss-score: 6.1
     cwe-id: CWE-79
     owasp-category: A03:2021-Injection
 
@@ -377,22 +377,22 @@ requests:
   {
     id: 'sensitive-backup-files',
     name: 'Exposed Database & Source Code Backup Dumps',
-    severity: 'critical',
+    severity: 'high',
     description: 'Probes for forgotten compressed backups (.zip, .sql, .tar.gz, .bak) left in web root directories.',
-    tags: ['backup', 'dumps', 'critical', 'nuclei'],
+    tags: ['backup', 'dumps', 'high', 'nuclei'],
     enabled: true,
     isBuiltin: true,
     rawYaml: `id: sensitive-backup-files
 info:
   name: Exposed Database Dump & Backup Archives
   author: nuclei-secops
-  severity: critical
+  severity: high
   description: Public archive dumps allow attackers to extract database tables, configuration secrets, and proprietary source code.
   reference:
     - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/04-Review_Old_Backup_and_Unreferenced_Files_for_Sensitive_Information
-  tags: backup,exposure,critical
+  tags: backup,exposure,high
   classification:
-    cvss-score: 9.3
+    cvss-score: 8.5
     cwe-id: CWE-530
     owasp-category: A05:2021-Security Misconfiguration
 

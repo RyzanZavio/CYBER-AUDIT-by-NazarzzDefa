@@ -64,6 +64,27 @@ syncExtensionTemplates();
 async function startServer() {
   const app = express();
 
+  // Disable x-powered-by banner header
+  app.disable('x-powered-by');
+
+  // Defensive HTTP Security Headers Middleware
+  app.use((req, res, next) => {
+    // Content-Security-Policy (allows safe inline styles/scripts for Vite & frame-ancestors for AI Studio preview)
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; frame-ancestors 'self' *;"
+    );
+    // Prevent MIME-sniffing
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Strict Transport Security (HSTS)
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+    // Referrer Policy
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    // Permissions Policy
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+  });
+
   app.use(express.json({ limit: '10mb' }));
 
   // Helper functions for scheduler

@@ -53,37 +53,45 @@ requests:
       },
       {
         id: 'api-debug-endpoints',
-        name: 'Exposed API Debug & Swagger Documentation',
+        name: 'Exposed Interactive API Documentation / Actuator Probe',
         severity: 'low',
-        description: 'Checks if interactive API documentation (Swagger UI, OpenAPI, Spring Boot Actuator) is exposed without authentication.',
-        tags: ['owasp-api', 'swagger', 'exposure'],
+        description: 'Checks if interactive OpenAPI/Swagger UI or Spring Boot Actuator endpoints are exposed without authentication.',
+        tags: ['owasp-api', 'swagger', 'exposure', 'defense'],
         enabled: true,
         isBuiltin: false,
         rawYaml: `id: api-debug-endpoints
 info:
-  name: Exposed API Debug & Swagger Documentation
+  name: Exposed Interactive API Documentation & Actuator Endpoints
   author: DevSecOps-Auditor
   severity: low
-  description: Detects publicly accessible Swagger/OpenAPI UI and Actuator debug endpoints.
+  description: Detects unauthenticated Swagger UI, OpenAPI JSON definitions, or Spring Boot Actuator endpoints.
   classification:
-    cvss-score: 3.7
+    cvss-score: 3.1
     cwe-id: CWE-200
     owasp-category: A05:2021-Security Misconfiguration
 requests:
   - method: GET
     path:
-      - "{{BaseURL}}/swagger-ui.html"
       - "{{BaseURL}}/v2/api-docs"
       - "{{BaseURL}}/v3/api-docs"
+      - "{{BaseURL}}/swagger-ui/index.html"
+      - "{{BaseURL}}/swagger-ui.html"
       - "{{BaseURL}}/actuator/health"
-    matchers-condition: or
+    matchers-condition: and
     matchers:
+      - type: status
+        status:
+          - 200
       - type: word
         part: body
         words:
-          - "swagger"
-          - "openapi"
-          - "actuator"
+          - '"swagger":"2.0"'
+          - '"openapi":"3.'
+          - 'id="swagger-ui"'
+          - 'swagger-ui-bundle.js'
+          - '{"status":"UP"'
+          - '"_links":{"self":'
+        condition: or
 `,
       },
     ],

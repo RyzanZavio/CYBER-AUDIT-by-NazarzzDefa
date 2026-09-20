@@ -39,6 +39,7 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
   const [timeoutSec, setTimeoutSec] = useState<number>(8);
 
   const presets = [
+    { label: 'smkn3kotabekasi.sch.id (Audit Target)', url: 'https://smkn3kotabekasi.sch.id' },
     { label: 'Local Dev App (Port 3000)', url: 'http://localhost:3000' },
     { label: 'OWASP Official Portal', url: 'https://owasp.org' },
     { label: 'Httpbin Testbed', url: 'https://httpbin.org' },

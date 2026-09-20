@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # One-Click Setup & Global CLI Installer
-# ReconizeTools / DevSecOps Vulnerability Audit Scanner
-# Works on: Parrot OS, Kali Linux, Ubuntu, Debian, Arch, WSL2
+# Cybersecurity Vulnerability Audit Scanner
+# Works on: Kali Linux, Parrot OS, Ubuntu, Debian, Arch, macOS, WSL2
 # ==============================================================================
 
 set -e
@@ -27,17 +27,28 @@ echo -e "${NC}"
 echo -e "${YELLOW}[*] Lokasi Project:${NC} $PROJECT_DIR"
 echo ""
 
-# 1. Install Node Dependencies with legacy-peer-deps to avoid ERESOLVE conflict
-echo -e "${CYAN}[1/3] Menginstal dependensi (npm install --legacy-peer-deps)...${NC}"
+# 1. Install Dependencies (Supports Python pip, Bun, pnpm, and NPM)
+echo -e "${CYAN}[1/3] Menginstal dependensi scanner...${NC}"
 cd "$PROJECT_DIR"
 
-if command -v npm >/dev/null 2>&1; then
-  npm install --legacy-peer-deps
-elif command -v bun >/dev/null 2>&1; then
+# Python CLI dependencies
+if command -v pip3 >/dev/null 2>&1; then
+  echo -e "${YELLOW}[*] Memasang dependensi Python CLI (requirements.txt)...${NC}"
+  pip3 install -r requirements.txt --quiet || pip3 install -r requirements.txt --user --quiet || true
+elif command -v pip >/dev/null 2>&1; then
+  pip install -r requirements.txt --quiet || true
+fi
+
+# Node.js / Bun Web GUI dependencies
+if command -v bun >/dev/null 2>&1; then
+  echo -e "${YELLOW}[*] Menggunakan Bun untuk instalasi kilat...${NC}"
   bun install
-else
-  echo -e "${RED}[!] Error: Node.js / npm tidak ditemukan. Silakan pasang Node.js terlebih dahulu.${NC}"
-  exit 1
+elif command -v pnpm >/dev/null 2>&1; then
+  echo -e "${YELLOW}[*] Menggunakan pnpm...${NC}"
+  pnpm install
+elif command -v npm >/dev/null 2>&1; then
+  echo -e "${YELLOW}[*] Menggunakan npm (--legacy-peer-deps)...${NC}"
+  npm install --legacy-peer-deps
 fi
 
 echo -e "${GREEN}[✓] Dependensi berhasil terinstal!${NC}"
@@ -57,7 +68,6 @@ if [ "$(id -u)" -ne 0 ]; then
   else
     TARGET_BIN_DIR="$HOME/.local/bin"
     mkdir -p "$TARGET_BIN_DIR"
-    # Ensure ~/.local/bin is in PATH
     if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
       export PATH="$HOME/.local/bin:$PATH"
       if [ -f "$HOME/.bashrc" ]; then
@@ -77,52 +87,47 @@ cat <<EOF > /tmp/cyber-audit-web
 cd "$PROJECT_DIR"
 echo -e "${CYAN}${BOLD}[*] Menjalankan Cyber Security Scanner Web UI...${NC}"
 echo -e "${GREEN}[*] Buka di browser: http://localhost:3000${NC}"
-npm run dev
+if command -v bun >/dev/null 2>&1; then
+  bun run dev
+else
+  npm run dev
+fi
 EOF
 chmod +x /tmp/cyber-audit-web
 $USE_SUDO mv /tmp/cyber-audit-web "$TARGET_BIN_DIR/cyber-audit-web"
 $USE_SUDO ln -sf "$TARGET_BIN_DIR/cyber-audit-web" "$TARGET_BIN_DIR/recon-web"
 
-# 4. Create 'cyber-audit' CLI wrapper script
+# 4. Create 'cyber-audit' CLI wrapper script (Runs Python CLI directly or falls back to API)
 cat <<EOF > /tmp/cyber-audit
 #!/usr/bin/env bash
-# CLI Wrapper untuk memindai target secara langsung dari terminal mana pun
-APP_API="\${AUDIT_API_URL:-http://localhost:3000}"
 PROJECT_DIR="$PROJECT_DIR"
-
-# Jika server belum menyala di localhost:3000, tawarkan auto-start atau jalankan via npx/tsx
-if ! curl -s --max-time 1 "\$APP_API/api/health" >/dev/null 2>&1; then
-  # Jalankan server secara otomatis di background jika belum aktif
-  echo -e "${YELLOW}[!] Server lokal belum aktif, menyalakan background engine...${NC}"
-  (cd "\$PROJECT_DIR" && npm run dev >/dev/null 2>&1) &
-  SERVER_PID=\$!
-  sleep 2
+if command -v python3 >/dev/null 2>&1 && [ -f "\$PROJECT_DIR/cyber_audit.py" ]; then
+  python3 "\$PROJECT_DIR/cyber_audit.py" "\$@"
+elif [ -f "\$PROJECT_DIR/server/cli-script.ts" ] && command -v npx >/dev/null 2>&1; then
+  cd "\$PROJECT_DIR" && npx tsx server/cli-script.ts "\$@"
+else
+  APP_API="\${AUDIT_API_URL:-http://localhost:3000}"
+  curl -sSL "\$APP_API/cyber-audit" | bash -s -- "\$@"
 fi
-
-# Download/jalankan CLI runner
-curl -sSL "\$APP_API/cyber-audit" | bash -s -- "\$@"
 EOF
 chmod +x /tmp/cyber-audit
 $USE_SUDO mv /tmp/cyber-audit "$TARGET_BIN_DIR/cyber-audit"
 $USE_SUDO ln -sf "$TARGET_BIN_DIR/cyber-audit" "$TARGET_BIN_DIR/recon-audit"
-$USE_SUDO ln -sf "$TARGET_BIN_DIR/cyber-audit" "$TARGET_BIN_DIR/git-audit"
 
 echo -e "${GREEN}[✓] Perintah global berhasil dipasang di:${NC} $TARGET_BIN_DIR"
 echo ""
 
 # 5. Success Banner & Instructions
-echo -e "${CYAN}[3/3] Selesai! Kamu sekarang bisa menggunakan perintah ini dari direktori mana pun (termasuk Home ~):${NC}"
+echo -e "${CYAN}[3/3] Selesai! Kamu sekarang bisa menggunakan perintah ini dari direktori mana pun:${NC}"
 echo "------------------------------------------------------------------------"
-echo -e "  1. Buka Web GUI Scanner dari mana saja:"
-echo -e "     ${BOLD}${GREEN}cyber-audit-web${NC}   (atau ${BOLD}recon-web${NC})"
+echo -e "  1. Buka Web GUI Scanner:"
+echo -e "     ${BOLD}${GREEN}cyber-audit-web${NC}"
 echo ""
-echo -e "  2. Scan target langsung dari terminal (di folder mana saja):"
-echo -e "     ${BOLD}${GREEN}cyber-audit -u https://target.com${NC}"
+echo -e "  2. Scan target langsung via CLI (Python / Native):"
+echo -e "     ${BOLD}${GREEN}cyber-audit -u https://target.com -p high${NC}"
+echo "     atau: ${BOLD}${GREEN}python3 cyber_audit.py -u https://target.com${NC}"
 echo ""
-echo -e "  3. Scan file subdomain (misal hasil subfinder di folder aktif saat ini):"
-echo -e "     ${BOLD}${GREEN}cyber-audit -l subdomains.txt -x http://127.0.0.1:8080${NC}"
-echo ""
-echo -e "  4. Cek menu bantuan:"
-echo -e "     ${BOLD}${GREEN}cyber-audit --help${NC}"
+echo -e "  3. Scan file subdomain dengan Burp Suite proxy:"
+echo -e "     ${BOLD}${GREEN}cyber-audit -l subdomains.txt -x http://127.0.0.1:8080 -o report.json${NC}"
 echo "------------------------------------------------------------------------"
-echo -e "${GREEN}${BOLD}Instalasi selesai dan siap dipakai!${NC}"
+echo -e "${GREEN}${BOLD}Instalasi selesai dan siap digunakan!${NC}"

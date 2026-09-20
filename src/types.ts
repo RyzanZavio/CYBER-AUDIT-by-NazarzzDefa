@@ -14,18 +14,31 @@ export interface FindingResponse {
   responseTimeMs?: number;
 }
 
+export interface SubFindingItem {
+  id: string;
+  name: string;
+  severity: VulnerabilitySeverity;
+  evidence: string;
+  remediation?: string;
+}
+
 export interface VulnerabilityFinding {
   id: string;
   templateId: string;
   name: string;
   severity: VulnerabilitySeverity;
   cvssScore: number;
+  cvssVector?: string;
+  cvssVersion?: '3.1' | '4.0';
   cweId: string;
   owaspCategory: string;
   description: string;
   url: string;
   matchedAt: string;
   evidence: string;
+  findingType?: 'atomic' | 'aggregated';
+  subFindings?: SubFindingItem[];
+  contextualNotes?: string;
   request?: FindingRequest;
   response?: FindingResponse;
   remediation: string;
