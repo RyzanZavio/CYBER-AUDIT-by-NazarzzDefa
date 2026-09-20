@@ -92,15 +92,19 @@ export async function executeVulnerabilityScan(
   targetUrl: string,
   templates: YamlTemplate[],
   options: {
+    scanId?: string;
     timeoutMs?: number;
     userAgent?: string;
     proxy?: ProxyConfig;
+    threads?: number;
+    abortSignal?: AbortSignal;
     onProgressLog?: (log: ScanLog) => void;
   } = {}
 ): Promise<ScanResult> {
   const startTime = new Date().toISOString();
   const startTimestamp = Date.now();
   const timeoutMs = options.timeoutMs || 8000;
+  const threads = Math.max(1, Math.min(25, Number(options.threads) || 5));
   const userAgent =
     options.proxy?.customUserAgent ||
     options.userAgent ||
@@ -132,6 +136,14 @@ export async function executeVulnerabilityScan(
   const rawFindings: VulnerabilityFinding[] = [];
   let requestsSent = 0;
   let templatesExecuted = 0;
+  let isCancelled = false;
+
+  if (options.abortSignal?.aborted) {
+    isCancelled = true;
+  }
+  options.abortSignal?.addEventListener('abort', () => {
+    isCancelled = true;
+  });
 
   const emitLog = (
     level: 'info' | 'warn' | 'crit' | 'pass',
@@ -157,22 +169,24 @@ export async function executeVulnerabilityScan(
     }
   };
 
-  emitLog('info', `Initializing DevSecOps Vulnerability Scan targeting: ${normalizedUrl}`);
+  emitLog('info', `Initializing DevSecOps Vulnerability Scan targeting: ${normalizedUrl} (Concurrency: ${threads} threads)`);
   if (options.proxy?.enabled && options.proxy?.url) {
     emitLog('info', `[Proxy Active] Upstream security proxy engaged: ${options.proxy.url} (SSL Validation: ${options.proxy.insecureSkipVerify ? 'Disabled/Burp-Bypass' : 'Strict'})`);
   }
-  emitLog('info', `Loaded ${templates.length} active YAML automation templates (OWASP/Nuclei/Burp Suite engine)`);
+  emitLog('info', `Loaded ${templates.length} active YAML automation templates (Threads: ${threads}, OWASP/Nuclei/Burp Suite engine)`);
 
-  for (const tpl of templates) {
-    if (!tpl.enabled) continue;
-    templatesExecuted++;
+  const executeTemplate = async (tpl: YamlTemplate) => {
+    if (isCancelled || options.abortSignal?.aborted) {
+      isCancelled = true;
+      return;
+    }
 
     let parsed: ParsedTemplate;
     try {
       parsed = yaml.load(tpl.rawYaml) as ParsedTemplate;
     } catch (err: any) {
       emitLog('warn', `Failed to parse YAML template [${tpl.id}]: ${err.message}`, tpl.id);
-      continue;
+      return;
     }
 
     const tplName = parsed?.info?.name || tpl.name;
@@ -196,10 +210,20 @@ export async function executeVulnerabilityScan(
 
     const requests = parsed.requests || [];
     for (const reqConfig of requests) {
+      if (isCancelled || options.abortSignal?.aborted) {
+        isCancelled = true;
+        return;
+      }
+
       const method = (reqConfig.method || 'GET').toUpperCase();
       const paths = reqConfig.path && reqConfig.path.length > 0 ? reqConfig.path : ['{{BaseURL}}/'];
 
       for (const rawPath of paths) {
+        if (isCancelled || options.abortSignal?.aborted) {
+          isCancelled = true;
+          return;
+        }
+
         const fullUrl = rawPath.replace(/\{\{BaseURL\}\}/g, normalizedUrl);
         requestsSent++;
 
@@ -214,6 +238,16 @@ export async function executeVulnerabilityScan(
           requestHeaders['Proxy-Authorization'] = `Basic ${Buffer.from(authString).toString('base64')}`;
         }
 
+        // Redact sensitive headers from log output to prevent credential disclosure
+        const sanitizedHeadersForLog: Record<string, string> = {};
+        for (const [k, v] of Object.entries(requestHeaders)) {
+          if (/^(authorization|proxy-authorization|cookie|x-api-key|apikey|token|set-cookie)$/i.test(k)) {
+            sanitizedHeadersForLog[k] = '[REDACTED]';
+          } else {
+            sanitizedHeadersForLog[k] = v;
+          }
+        }
+
         emitLog(
           'info',
           `[PROBE] Transmitting ${method} ${fullUrl}`,
@@ -223,7 +257,7 @@ export async function executeVulnerabilityScan(
           {
             method,
             url: fullUrl,
-            headers: requestHeaders,
+            headers: sanitizedHeadersForLog,
             body: reqConfig.body,
           }
         );
@@ -235,19 +269,19 @@ export async function executeVulnerabilityScan(
 
         try {
           const reqStart = Date.now();
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          const fetchSignal = options.abortSignal
+            ? AbortSignal.any([AbortSignal.timeout(timeoutMs), options.abortSignal])
+            : AbortSignal.timeout(timeoutMs);
 
           const res = await fetch(fullUrl, {
             method,
             headers: requestHeaders,
             body: method !== 'GET' && method !== 'HEAD' && reqConfig.body ? reqConfig.body : undefined,
-            signal: controller.signal,
+            signal: fetchSignal,
             redirect: 'follow',
             dispatcher,
           } as any);
 
-          clearTimeout(timer);
           responseTimeMs = Date.now() - reqStart;
           responseStatusCode = res.status;
 
@@ -260,7 +294,16 @@ export async function executeVulnerabilityScan(
           const text = await res.text();
           responseBody = text.slice(0, 100000);
         } catch (fetchErr: any) {
+          if (isCancelled || options.abortSignal?.aborted || (fetchErr.name === 'AbortError' && options.abortSignal?.aborted)) {
+            isCancelled = true;
+            return;
+          }
           emitLog('warn', `[${tpl.id}] Request error to ${fullUrl}: ${fetchErr.name === 'AbortError' ? 'Connection timeout' : fetchErr.message}`, tpl.id);
+        }
+
+        if (isCancelled || options.abortSignal?.aborted) {
+          isCancelled = true;
+          return;
         }
 
         // Multi-Condition Matcher Engine
@@ -606,7 +649,28 @@ export async function executeVulnerabilityScan(
         }
       }
     }
-  }
+  };
+
+  // Multi-threaded worker queue: execute enabled templates with configured concurrency
+  const enabledTemplates = templates.filter(t => t.enabled);
+  let templateCursor = 0;
+  const workerCount = Math.min(threads, Math.max(1, enabledTemplates.length));
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (templateCursor < enabledTemplates.length) {
+      if (isCancelled || options.abortSignal?.aborted) {
+        isCancelled = true;
+        break;
+      }
+      const currentIndex = templateCursor++;
+      const tpl = enabledTemplates[currentIndex];
+      if (!tpl) break;
+      templatesExecuted++;
+      await executeTemplate(tpl);
+    }
+  });
+
+  await Promise.all(workers);
 
   // POST-PROCESSING PIPELINE: Deduplication, Aggregation & Contextual CVSS Scoring
   const postProcessedFindings: VulnerabilityFinding[] = [];
@@ -636,21 +700,29 @@ export async function executeVulnerabilityScan(
   const endTime = new Date().toISOString();
   const durationMs = Date.now() - startTimestamp;
 
-  emitLog(
-    'info',
-    `Audit completed in ${(durationMs / 1000).toFixed(1)}s. Executed ${templatesExecuted} templates, sent ${requestsSent} requests. Consolidated ${postProcessedFindings.length} root finding(s).`
-  );
+  if (isCancelled) {
+    emitLog(
+      'warn',
+      `[CANCELLED] Scan was cancelled by user after ${(durationMs / 1000).toFixed(1)}s. Executed ${templatesExecuted} templates, sent ${requestsSent} requests before termination.`
+    );
+  } else {
+    emitLog(
+      'info',
+      `Audit completed in ${(durationMs / 1000).toFixed(1)}s. Executed ${templatesExecuted} templates with ${threads} concurrent threads, sent ${requestsSent} requests. Consolidated ${postProcessedFindings.length} root finding(s).`
+    );
+  }
 
   return {
-    id: `scan-${Date.now()}`,
+    id: options.scanId || `scan-${Date.now()}`,
     targetUrl: normalizedUrl,
     startTime,
     endTime,
     durationMs,
-    status: 'completed',
+    status: isCancelled ? 'cancelled' : 'completed',
     findings: postProcessedFindings,
     templatesExecuted,
     requestsSent,
     logs,
+    threads,
   };
 }

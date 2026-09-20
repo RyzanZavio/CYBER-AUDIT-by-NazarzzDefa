@@ -87,7 +87,7 @@ export interface ScanResult {
   startTime: string;
   endTime?: string;
   durationMs?: number;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
   findings: VulnerabilityFinding[];
   templatesExecuted: number;
   requestsSent: number;
@@ -96,6 +96,7 @@ export interface ScanResult {
   accuracyLevel?: string;
   detectedTechnologies?: string[];
   cveMatchedCount?: number;
+  threads?: number;
 }
 
 export interface WebhookConfig {

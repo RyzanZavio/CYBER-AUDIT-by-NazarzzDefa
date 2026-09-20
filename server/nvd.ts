@@ -4,8 +4,8 @@ import { syncTemplateWithYaml } from '../src/utils/templateParser';
 
 export const NVD_API_BASE = 'https://services.nvd.nist.gov/rest/json/cves/2.0';
 
-// Provided NVD API Key (can be configured via environment variable NVD_API_KEY)
-export const NVD_API_KEY = process.env.NVD_API_KEY || 'C0B96B20-0DF0-490E-A64F-A5A7646611D6';
+// Optional NVD API Key (configured securely via environment variable NVD_API_KEY)
+export const NVD_API_KEY = process.env.NVD_API_KEY || '';
 
 export interface NvdCvssMetrics {
   version: string;

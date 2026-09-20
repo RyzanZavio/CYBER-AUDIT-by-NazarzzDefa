@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { db } from './server/storage';
 import {
@@ -64,7 +65,7 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
-  // Optional API Key Authentication Middleware for state-modifying & scan endpoints
+  // API Key Authentication Middleware with timing-attack prevention
   const apiKeyAuthMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const configuredKey = process.env.AUDIT_API_KEY;
     if (!configuredKey) {
@@ -78,14 +79,81 @@ async function startServer() {
     const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
     const providedToken = bearerMatch ? bearerMatch[1] : customKeyHeader;
 
-    if (providedToken === configuredKey) {
-      return next();
+    if (providedToken && configuredKey && providedToken.length === configuredKey.length) {
+      const bufA = Buffer.from(providedToken);
+      const bufB = Buffer.from(configuredKey);
+      if (crypto.timingSafeEqual(bufA, bufB)) {
+        return next();
+      }
     }
 
     res.status(401).json({
       error: 'Unauthorized: Invalid or missing API key.',
       hint: 'Provide "Authorization: Bearer <token>" or "X-API-Key: <token>" header.',
     });
+  };
+
+  // In-memory sliding rate limiter for resource-intensive scanning endpoints
+  const scanRateLimitMap = new Map<string, { count: number; resetTime: number }>();
+  const SCAN_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute window
+  const SCAN_RATE_LIMIT_MAX = 20; // 20 requests per minute per IP
+
+  const scanRateLimitMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const rawIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || req.socket.remoteAddress || '127.0.0.1';
+    const now = Date.now();
+    const clientRecord = scanRateLimitMap.get(rawIp);
+
+    if (!clientRecord || now > clientRecord.resetTime) {
+      scanRateLimitMap.set(rawIp, { count: 1, resetTime: now + SCAN_RATE_LIMIT_WINDOW_MS });
+      return next();
+    }
+
+    if (clientRecord.count >= SCAN_RATE_LIMIT_MAX) {
+      const retryAfterSec = Math.max(1, Math.ceil((clientRecord.resetTime - now) / 1000));
+      res.setHeader('Retry-After', retryAfterSec.toString());
+      res.status(429).json({
+        error: 'Too many scan requests. Rate limit exceeded (20 scans/min) to prevent DoS.',
+        retryAfter: `${retryAfterSec}s`,
+      });
+      return;
+    }
+
+    clientRecord.count++;
+    next();
+  };
+
+  // Active Scan Registry for Concurrency, Status Monitoring, and Cancellation
+  interface ActiveScanEntry {
+    abortController: AbortController;
+    targetUrl: string;
+    startTime: number;
+    threads: number;
+    isBatch?: boolean;
+  }
+  const activeScans = new Map<string, ActiveScanEntry>();
+
+  // Centralized SSRF-validated webhook dispatch helper
+  const dispatchScanWebhookSafely = async (webhookConfig: WebhookConfig, result: ScanResult) => {
+    if (!webhookConfig || !webhookConfig.enabled || !webhookConfig.url) return;
+
+    // Validate webhook URL through SSRF validator (strictly enforcing HTTPS and non-internal IPs)
+    const validation = await validateTargetUrl(webhookConfig.url, { requireHttps: true });
+    if (!validation.isValid) {
+      console.warn(`[Webhook Blocked] Webhook target failed SSRF validation: ${validation.error}`);
+      return;
+    }
+
+    const severityOrder = ['info', 'low', 'medium', 'high', 'critical'];
+    const thresholdIndex = severityOrder.indexOf(webhookConfig.minSeverity || 'medium');
+    const hasRelevantFindings = result.findings.some(
+      f => severityOrder.indexOf(f.severity) >= thresholdIndex
+    );
+
+    if (hasRelevantFindings || result.findings.length === 0) {
+      sendWebhookNotification(webhookConfig, result).catch(err => {
+        console.error('[Webhook] Scan dispatch error:', err);
+      });
+    }
   };
 
   // Initialize background daily scheduler with persistent storage callbacks
@@ -369,18 +437,40 @@ async function startServer() {
     }
   });
 
-  // Scan endpoint with SSRF, Protocol Validation, and Persistence
-  app.post('/api/scan', apiKeyAuthMiddleware, async (req, res) => {
+  // Scan endpoint with SSRF, Protocol Validation, Rate Limiting, Concurrency (Threads), Cancellation, and Persistence
+  app.post('/api/scan', apiKeyAuthMiddleware, scanRateLimitMiddleware, async (req, res) => {
+    const scanId = (req.body && req.body.scanId) || `scan-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const threads = Math.max(1, Math.min(25, Number(req.body?.threads) || 5));
+    const abortController = new AbortController();
+
+    activeScans.set(scanId, {
+      abortController,
+      targetUrl: req.body?.targetUrl || 'unknown',
+      startTime: Date.now(),
+      threads,
+    });
+
+    const cleanupActive = () => {
+      activeScans.delete(scanId);
+    };
+
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        abortController.abort();
+        cleanupActive();
+      }
+    });
+
     try {
-      const { targetUrl, templateIds, timeoutMs, webhook, allowInternal } = req.body;
+      const { targetUrl, templateIds, timeoutMs, webhook } = req.body;
 
       if (!targetUrl || typeof targetUrl !== 'string') {
         res.status(400).json({ error: 'Valid targetUrl is required' });
         return;
       }
 
-      // SSRF & Target Validation
-      const targetValidation = validateTargetUrl(targetUrl, { allowInternal: !!allowInternal });
+      // SSRF & Target Validation (Async DNS check to prevent DNS rebinding)
+      const targetValidation = await validateTargetUrl(targetUrl);
       if (!targetValidation.isValid) {
         res.status(400).json({
           error: targetValidation.error,
@@ -392,6 +482,10 @@ async function startServer() {
 
       const validatedUrl = targetValidation.normalizedUrl || targetUrl;
 
+      // Update registry with normalized URL
+      const registered = activeScans.get(scanId);
+      if (registered) registered.targetUrl = validatedUrl;
+
       // Filter templates from persistent storage
       let templatesToRun = db.getTemplates().filter(t => t.enabled);
       if (Array.isArray(templateIds) && templateIds.length > 0) {
@@ -401,7 +495,7 @@ async function startServer() {
       const proxyConfig = db.getProxyConfig();
       const effectiveProxy = req.body.proxy || (proxyConfig.enabled ? proxyConfig : undefined);
 
-      console.log(`[Scan] Starting scan on target: ${validatedUrl} with ${templatesToRun.length} templates (Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'})`);
+      console.log(`[Scan] Starting scan ${scanId} on target: ${validatedUrl} with ${templatesToRun.length} templates (Threads: ${threads}, Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'})`);
 
       const isStreaming = req.headers.accept?.includes('text/event-stream') || req.query.stream === 'true' || req.path.endsWith('/stream');
 
@@ -412,6 +506,9 @@ async function startServer() {
         res.flushHeaders?.();
 
         const result = await executeVulnerabilityScan(validatedUrl, templatesToRun, {
+          scanId,
+          threads,
+          abortSignal: abortController.signal,
           timeoutMs: timeoutMs || 8000,
           userAgent: 'DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)',
           proxy: effectiveProxy,
@@ -423,21 +520,10 @@ async function startServer() {
         // Save scan result to persistent database
         await db.saveScanResult(result);
 
-        // Handle webhook notification if configured
+        // Handle webhook notification securely if configured
         const currentWebhookConfig = db.getWebhookConfig();
         const effectiveWebhook: WebhookConfig = webhook || currentWebhookConfig;
-        if (effectiveWebhook && effectiveWebhook.enabled && effectiveWebhook.url) {
-          const severityOrder = ['info', 'low', 'medium', 'high', 'critical'];
-          const thresholdIndex = severityOrder.indexOf(effectiveWebhook.minSeverity || 'medium');
-          const hasRelevantFindings = result.findings.some(
-            f => severityOrder.indexOf(f.severity) >= thresholdIndex
-          );
-          if (hasRelevantFindings || result.findings.length === 0) {
-            sendWebhookNotification(effectiveWebhook, result).catch(err => {
-              console.error('[Webhook] Scan dispatch error:', err);
-            });
-          }
-        }
+        await dispatchScanWebhookSafely(effectiveWebhook, result);
 
         res.write(`data: ${JSON.stringify({ type: 'complete', result })}\n\n`);
         res.end();
@@ -445,6 +531,9 @@ async function startServer() {
       }
 
       const result = await executeVulnerabilityScan(validatedUrl, templatesToRun, {
+        scanId,
+        threads,
+        abortSignal: abortController.signal,
         timeoutMs: timeoutMs || 8000,
         userAgent: 'DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)',
         proxy: effectiveProxy,
@@ -453,31 +542,72 @@ async function startServer() {
       // Save scan result to persistent database
       await db.saveScanResult(result);
 
-      // Handle webhook notification if configured
+      // Handle webhook notification securely if configured
       const currentWebhookConfig = db.getWebhookConfig();
       const effectiveWebhook: WebhookConfig = webhook || currentWebhookConfig;
-      if (effectiveWebhook && effectiveWebhook.enabled && effectiveWebhook.url) {
-        const severityOrder = ['info', 'low', 'medium', 'high', 'critical'];
-        const thresholdIndex = severityOrder.indexOf(effectiveWebhook.minSeverity || 'medium');
-
-        const hasRelevantFindings = result.findings.some(
-          f => severityOrder.indexOf(f.severity) >= thresholdIndex
-        );
-
-        if (hasRelevantFindings || result.findings.length === 0) {
-          sendWebhookNotification(effectiveWebhook, result).then(webhookRes => {
-            console.log(`[Webhook] Scan dispatch result:`, webhookRes.message);
-          }).catch(err => {
-            console.error('[Webhook] Scan dispatch error:', err);
-          });
-        }
-      }
+      await dispatchScanWebhookSafely(effectiveWebhook, result);
 
       res.json(result);
     } catch (err: any) {
       console.error('[Scan] Error executing scan:', err);
       res.status(500).json({ error: err.message || 'Scan execution failed' });
+    } finally {
+      cleanupActive();
     }
+  });
+
+  // Cancel running scan by ID (or cancel all ongoing scans)
+  app.post('/api/scan/cancel', (req, res) => {
+    const { scanId } = req.body || {};
+
+    if (scanId && typeof scanId === 'string') {
+      const active = activeScans.get(scanId);
+      if (active) {
+        active.abortController.abort();
+        activeScans.delete(scanId);
+        res.json({ success: true, message: `Scan ${scanId} cancelled successfully.`, scanId });
+        return;
+      }
+
+      // Check partial match
+      for (const [id, val] of activeScans.entries()) {
+        if (id.includes(scanId)) {
+          val.abortController.abort();
+          activeScans.delete(id);
+          res.json({ success: true, message: `Scan ${id} cancelled successfully.`, scanId: id });
+          return;
+        }
+      }
+    }
+
+    // If no specific scanId or not found, cancel all active scans
+    let cancelledCount = 0;
+    for (const [id, val] of activeScans.entries()) {
+      val.abortController.abort();
+      activeScans.delete(id);
+      cancelledCount++;
+    }
+
+    res.json({
+      success: true,
+      message: cancelledCount > 0 ? `Successfully cancelled ${cancelledCount} active scan(s).` : 'No active scans found to cancel.',
+      cancelledCount,
+    });
+  });
+
+  // Query currently running scans
+  app.get('/api/scan/active', (req, res) => {
+    const activeList = Array.from(activeScans.entries()).map(([scanId, val]) => ({
+      scanId,
+      targetUrl: val.targetUrl,
+      elapsedMs: Date.now() - val.startTime,
+      threads: val.threads,
+      isBatch: !!val.isBatch,
+    }));
+    res.json({
+      activeCount: activeList.length,
+      scans: activeList,
+    });
   });
 
   // Last scan result & history
@@ -495,23 +625,46 @@ async function startServer() {
     res.json({ success: true, message: 'Scan history cleared' });
   });
 
-  // Batch Multi-Target Scan endpoint (for subfinder/file drag/drop lists)
-  app.post('/api/scan/batch', apiKeyAuthMiddleware, async (req, res) => {
+  // Batch Multi-Target Scan endpoint (for subfinder/file drag/drop lists) with Concurrency and Cancellation
+  app.post('/api/scan/batch', apiKeyAuthMiddleware, scanRateLimitMiddleware, async (req, res) => {
+    const scanId = (req.body && req.body.scanId) || `batch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const threads = Math.max(1, Math.min(25, Number(req.body?.threads) || 5));
+    const abortController = new AbortController();
+
+    activeScans.set(scanId, {
+      abortController,
+      targetUrl: `Batch (${(req.body?.targets || []).length} targets)`,
+      startTime: Date.now(),
+      threads,
+      isBatch: true,
+    });
+
+    const cleanupActive = () => {
+      activeScans.delete(scanId);
+    };
+
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        abortController.abort();
+        cleanupActive();
+      }
+    });
+
     try {
-      const { targets, templateIds, timeoutMs, proxy, webhook, allowInternal } = req.body;
+      const { targets, templateIds, timeoutMs, proxy, webhook } = req.body;
 
       if (!Array.isArray(targets) || targets.length === 0) {
         res.status(400).json({ error: 'Array of target hosts is required' });
         return;
       }
 
-      // Filter and validate targets against SSRF
+      // Filter and validate targets against SSRF with async DNS resolution
       const validatedTargets: string[] = [];
       const skippedTargets: { target: string; reason: string }[] = [];
 
       for (const t of targets) {
         if (!t || typeof t !== 'string') continue;
-        const validation = validateTargetUrl(t, { allowInternal: !!allowInternal });
+        const validation = await validateTargetUrl(t);
         if (validation.isValid && validation.normalizedUrl) {
           validatedTargets.push(validation.normalizedUrl);
         } else {
@@ -534,21 +687,34 @@ async function startServer() {
         templatesToRun = templatesToRun.filter(t => templateIds.includes(t.id));
       }
 
-      console.log(`[Batch Scan] Commencing batch scan on ${validatedTargets.length} validated targets (Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'})`);
+      console.log(`[Batch Scan] Commencing batch scan ${scanId} on ${validatedTargets.length} validated targets (Threads: ${threads}, Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'})`);
 
       const resultsByTarget: Record<string, ScanResult> = {};
       const allFindings: VulnerabilityFinding[] = [];
       let completedCount = 0;
       let failedCount = 0;
+      let isCancelled = false;
 
       for (const target of validatedTargets) {
+        if (abortController.signal.aborted) {
+          isCancelled = true;
+          break;
+        }
+
         try {
           const scanRes = await executeVulnerabilityScan(target, templatesToRun, {
+            scanId: `${scanId}-${target.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}`,
+            threads,
+            abortSignal: abortController.signal,
             timeoutMs: timeoutMs || 6000,
             proxy: effectiveProxy,
           });
           resultsByTarget[target] = scanRes;
           allFindings.push(...scanRes.findings);
+          if (scanRes.status === 'cancelled') {
+            isCancelled = true;
+            break;
+          }
           completedCount++;
         } catch (err: any) {
           failedCount++;
@@ -573,10 +739,13 @@ async function startServer() {
       }
 
       const summary = {
-        id: `batch-${Date.now()}`,
+        id: scanId,
         totalTargets: targets.length,
         completedTargets: completedCount,
         failedTargets: failedCount,
+        isCancelled,
+        status: isCancelled ? 'cancelled' : 'completed',
+        threads,
         totalFindings: allFindings.length,
         criticalCount: allFindings.filter(f => f.severity === 'critical').length,
         highCount: allFindings.filter(f => f.severity === 'high').length,
@@ -585,7 +754,7 @@ async function startServer() {
         timestamp: new Date().toISOString(),
       };
 
-      // Optional webhook notification for batch completion
+      // Optional secure webhook notification for batch completion
       const currentWebhookConfig = db.getWebhookConfig();
       const effectiveWebhook: WebhookConfig = webhook || currentWebhookConfig;
       if (effectiveWebhook && effectiveWebhook.enabled && effectiveWebhook.url) {
@@ -600,15 +769,15 @@ async function startServer() {
           requestsSent: targets.length * templatesToRun.length,
           logs: [],
         };
-        sendWebhookNotification(effectiveWebhook, dummyResult).catch(err =>
-          console.error('[Webhook] Batch scan notification error:', err)
-        );
+        await dispatchScanWebhookSafely(effectiveWebhook, dummyResult);
       }
 
       res.json(summary);
     } catch (err: any) {
       console.error('[Batch Scan] Error executing batch scan:', err);
       res.status(500).json({ error: err.message || 'Batch scan execution failed' });
+    } finally {
+      cleanupActive();
     }
   });
 
@@ -619,6 +788,13 @@ async function startServer() {
 
   app.post('/api/proxy', apiKeyAuthMiddleware, async (req, res) => {
     const config: Partial<ProxyConfig> = req.body;
+    if (config.url) {
+      const validation = await validateTargetUrl(config.url);
+      if (!validation.isValid) {
+        res.status(400).json({ error: validation.error, code: 'SSRF_BLOCKED' });
+        return;
+      }
+    }
     const updated = await db.saveProxyConfig(config);
     console.log(`[Proxy] Configuration updated: enabled=${updated.enabled}, url=${updated.url}`);
     res.json({ success: true, config: updated });
@@ -636,6 +812,13 @@ async function startServer() {
       // Validate proxy URL scheme
       if (!/^https?:\/\//i.test(proxyToTest.url) && !/^socks5?:\/\//i.test(proxyToTest.url)) {
         res.status(400).json({ success: false, message: 'Invalid proxy protocol. Expected http://, https://, or socks5://' });
+        return;
+      }
+
+      // SSRF validation for proxy address
+      const validation = await validateTargetUrl(proxyToTest.url);
+      if (!validation.isValid) {
+        res.status(400).json({ success: false, message: `Proxy address blocked by SSRF filter: ${validation.error}` });
         return;
       }
 
@@ -746,7 +929,7 @@ async function startServer() {
   app.post('/api/webhook', apiKeyAuthMiddleware, async (req, res) => {
     const config: Partial<WebhookConfig> = req.body;
     if (config.url) {
-      const validation = validateTargetUrl(config.url, { requireHttps: true });
+      const validation = await validateTargetUrl(config.url, { requireHttps: true });
       if (!validation.isValid) {
         res.status(400).json({ error: validation.error, code: 'SSRF_BLOCKED' });
         return;
@@ -766,7 +949,7 @@ async function startServer() {
       }
 
       // SSRF validation for webhook destination (enforce HTTPS & non-internal)
-      const validation = validateTargetUrl(config.url, { requireHttps: true });
+      const validation = await validateTargetUrl(config.url, { requireHttps: true });
       if (!validation.isValid) {
         res.status(400).json({
           success: false,
@@ -853,9 +1036,17 @@ async function startServer() {
 
   // Linux & WSL CLI Downloadable Script and Installer (wget, curl, git support)
   const sendCliScript = (req: express.Request, res: express.Response, filename = 'cyber-audit') => {
-    const hostHeader = req.get('host') || 'localhost:3000';
-    const proto = req.get('x-forwarded-proto') || 'http';
-    const appUrl = `${proto}://${hostHeader}`;
+    let appUrl = process.env.APP_URL;
+
+    if (!appUrl) {
+      const rawHost = req.get('host') || 'localhost:3000';
+      // Strictly sanitize and validate Host header to prevent Host Header Injection into shell script
+      const sanitizedHost = /^[a-zA-Z0-9.-]+(:[0-9]{1,5})?$/.test(rawHost) ? rawHost : 'localhost:3000';
+      const rawProto = (req.get('x-forwarded-proto') || 'http').toLowerCase();
+      const sanitizedProto = rawProto === 'https' ? 'https' : 'http';
+      appUrl = `${sanitizedProto}://${sanitizedHost}`;
+    }
+
     const script = generateLinuxWslCliScript(appUrl);
 
     res.setHeader('Content-Type', 'text/x-shellscript; charset=utf-8');

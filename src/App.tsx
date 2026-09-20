@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Shield,
   Terminal,
@@ -222,12 +222,67 @@ export default function App() {
     }
   };
 
-  // Run security scan
+  const currentScanAbortControllerRef = useRef<AbortController | null>(null);
+  const currentScanIdRef = useRef<string | null>(null);
+
+  // Cancel active scan immediately
+  const handleCancelScan = async () => {
+    const scanId = currentScanIdRef.current;
+
+    // Abort client fetch stream
+    if (currentScanAbortControllerRef.current) {
+      currentScanAbortControllerRef.current.abort();
+      currentScanAbortControllerRef.current = null;
+    }
+
+    // Call backend cancellation endpoint to abort running worker threads
+    if (scanId) {
+      try {
+        await fetch('/api/scan/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scanId }),
+        });
+      } catch (err) {
+        console.warn('Backend cancel notice error:', err);
+      }
+    }
+
+    setIsScanning(false);
+    if (visualSettings.enableSoundFx) {
+      cyberSound.playPing('alert', visualSettings.soundVolume);
+    }
+
+    setScanLogs(prev => [
+      ...prev,
+      {
+        timestamp: new Date().toLocaleTimeString(),
+        level: 'warn',
+        message: `[HALTED] Audit scan cancelled by operator. Active threads aborted.`,
+      },
+    ]);
+
+    setCurrentScanResult(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        status: 'cancelled',
+      };
+    });
+  };
+
+  // Run security scan with multi-thread concurrency and cancellation support
   const handleStartScan = async (
     targetUrl: string,
     selectedTemplateIds: string[],
-    timeoutMs: number
+    timeoutMs: number,
+    threads: number = 10
   ) => {
+    const scanId = `scan-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    currentScanIdRef.current = scanId;
+    const abortController = new AbortController();
+    currentScanAbortControllerRef.current = abortController;
+
     setIsScanning(true);
     if (visualSettings.enableSoundFx) {
       cyberSound.playPing('scan', visualSettings.soundVolume);
@@ -237,12 +292,12 @@ export default function App() {
       {
         timestamp: new Date().toLocaleTimeString(),
         level: 'info',
-        message: `DevSecOps Vulnerability Auditor v2.4 initialized`,
+        message: `DevSecOps Vulnerability Auditor v2.4 initialized [Scan ID: ${scanId}]`,
       },
       {
         timestamp: new Date().toLocaleTimeString(),
         level: 'info',
-        message: `Target: ${targetUrl} | Templates: ${selectedTemplateIds.length}`,
+        message: `Target: ${targetUrl} | Templates: ${selectedTemplateIds.length} | Concurrency: ${threads} worker threads`,
       },
       {
         timestamp: new Date().toLocaleTimeString(),
@@ -259,10 +314,13 @@ export default function App() {
           'Content-Type': 'application/json',
           'Accept': 'text/event-stream',
         },
+        signal: abortController.signal,
         body: JSON.stringify({
+          scanId,
           targetUrl,
           templateIds: selectedTemplateIds,
           timeoutMs,
+          threads,
           webhook: webhookConfig,
         }),
       });
@@ -335,19 +393,31 @@ export default function App() {
         }
       }
     } catch (err: any) {
-      if (visualSettings.enableSoundFx) {
-        cyberSound.playPing('alert', visualSettings.soundVolume);
+      if (err.name === 'AbortError') {
+        setScanLogs(prev => [
+          ...prev,
+          {
+            timestamp: new Date().toLocaleTimeString(),
+            level: 'warn',
+            message: `[ABORTED] Scan request stream was terminated by client.`,
+          },
+        ]);
+      } else {
+        if (visualSettings.enableSoundFx) {
+          cyberSound.playPing('alert', visualSettings.soundVolume);
+        }
+        setScanLogs(prev => [
+          ...prev,
+          {
+            timestamp: new Date().toLocaleTimeString(),
+            level: 'crit',
+            message: `Scan execution halted: ${err.message}`,
+          },
+        ]);
       }
-      setScanLogs(prev => [
-        ...prev,
-        {
-          timestamp: new Date().toLocaleTimeString(),
-          level: 'crit',
-          message: `Scan execution halted: ${err.message}`,
-        },
-      ]);
     } finally {
       setIsScanning(false);
+      currentScanAbortControllerRef.current = null;
     }
   };
 
@@ -859,6 +929,7 @@ export default function App() {
             templates={templates}
             proxyConfig={proxyConfig}
             onStartScan={handleStartScan}
+            onCancelScan={handleCancelScan}
             onQuickRun={handleQuickRun}
             onClearLogs={() => setScanLogs([])}
           />
@@ -871,6 +942,7 @@ export default function App() {
               templates={templates}
               isScanning={isScanning}
               onStartScan={handleStartScan}
+              onCancelScan={handleCancelScan}
               lastScan={currentScanResult}
               onViewFindingsTab={() => handleTabChange('findings')}
             />
@@ -890,6 +962,7 @@ export default function App() {
                 isScanning={isScanning}
                 onClearLogs={() => setScanLogs([])}
                 onQuickRun={handleQuickRun}
+                onCancelScan={handleCancelScan}
               />
             </div>
           </div>

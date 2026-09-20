@@ -14,6 +14,7 @@ import {
   Filter,
   Send,
   ExternalLink,
+  Square,
 } from 'lucide-react';
 import { ScanLog } from '../types';
 
@@ -22,6 +23,7 @@ interface TerminalViewProps {
   isScanning: boolean;
   onClearLogs?: () => void;
   onQuickRun?: (cmd: string) => void;
+  onCancelScan?: () => void;
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({
@@ -29,6 +31,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   isScanning,
   onClearLogs,
   onQuickRun,
+  onCancelScan,
 }) => {
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -119,10 +122,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             secops@parrot-os: ~/reconize-audit (live-stream)
           </span>
           {isScanning ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-cyan-950 text-cyan-400 border border-cyan-800 animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-              REALTIME TRANSMITTING...
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-cyan-950 text-cyan-400 border border-cyan-800 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                REALTIME TRANSMITTING...
+              </span>
+              {onCancelScan && (
+                <button
+                  id="terminal-cancel-scan-btn"
+                  onClick={onCancelScan}
+                  className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white font-mono text-[10px] font-bold flex items-center gap-1 transition active:scale-95 shadow-sm cursor-pointer"
+                  title="Abort worker threads and cancel scan (ESC)"
+                >
+                  <Square className="w-2.5 h-2.5 fill-current" />
+                  <span>CANCEL [ESC]</span>
+                </button>
+              )}
+            </div>
           ) : (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>

@@ -1,8 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Upload,
   FileText,
   Play,
+  Square,
+  Cpu,
   CheckCircle2,
   AlertTriangle,
   HardDrive,
@@ -43,6 +45,7 @@ export const BatchScanner: React.FC<BatchScannerProps> = ({
     templates.filter(t => t.enabled).map(t => t.id)
   );
   const [isScanning, setIsScanning] = useState(false);
+  const [threads, setThreads] = useState<number>(10);
   const [progress, setProgress] = useState<{ current: number; total: number; currentTarget?: string }>({
     current: 0,
     total: 0,
@@ -51,6 +54,39 @@ export const BatchScanner: React.FC<BatchScannerProps> = ({
   const [selectedTargetDetail, setSelectedTargetDetail] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const batchAbortControllerRef = useRef<AbortController | null>(null);
+  const currentBatchScanIdRef = useRef<string | null>(null);
+
+  const handleCancelBatchScan = async () => {
+    const scanId = currentBatchScanIdRef.current;
+    if (batchAbortControllerRef.current) {
+      batchAbortControllerRef.current.abort();
+    }
+    if (scanId) {
+      try {
+        await fetch('/api/scan/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scanId }),
+        });
+      } catch (e) {
+        console.warn('Failed to cancel backend batch scan:', e);
+      }
+    }
+    setIsScanning(false);
+  };
+
+  // Keyboard shortcut Esc to cancel batch scan
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isScanning) {
+        e.preventDefault();
+        handleCancelBatchScan();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isScanning]);
 
   const handleProcessFile = (file: File) => {
     setSourceFileName(file.name);
@@ -128,6 +164,11 @@ testbed.example.com
   const handleStartBatchScan = async () => {
     if (parsedTargets.length === 0 || isScanning) return;
 
+    const scanId = `batch-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    currentBatchScanIdRef.current = scanId;
+    const controller = new AbortController();
+    batchAbortControllerRef.current = controller;
+
     setIsScanning(true);
     setBatchSummary(null);
     setSelectedTargetDetail(null);
@@ -139,10 +180,13 @@ testbed.example.com
       const res = await fetch('/api/scan/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
+          scanId,
           targets: targetUrls,
           templateIds: selectedTemplateIds,
           timeoutMs: 6000,
+          threads,
           proxy: proxyConfig.enabled ? proxyConfig : undefined,
         }),
       });
@@ -158,10 +202,15 @@ testbed.example.com
         onBatchCompleted(data);
       }
     } catch (err: any) {
-      console.error('Batch scan error:', err);
-      alert(`Batch scan error: ${err.message}`);
+      if (err.name === 'AbortError') {
+        console.info('Batch scan aborted by user');
+      } else {
+        console.error('Batch scan error:', err);
+        alert(`Batch scan error: ${err.message}`);
+      }
     } finally {
       setIsScanning(false);
+      batchAbortControllerRef.current = null;
     }
   };
 
@@ -364,34 +413,79 @@ testbed.example.com
             )}
           </div>
 
-          {/* Action Launch Bar */}
-          <div className="pt-4 border-t border-slate-800 mt-3 space-y-2">
-            <button
-              id="start-batch-scan-btn"
-              disabled={parsedTargets.length === 0 || isScanning}
-              onClick={handleStartBatchScan}
-              className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-lg transition ${
-                parsedTargets.length === 0 || isScanning
-                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-cyan-950'
-              }`}
-            >
-              {isScanning ? (
-                <>
-                  <RotateCw className="w-4 h-4 animate-spin text-cyan-200" />
-                  <span>Scanning {parsedTargets.length} Domains via DevSecOps Engine...</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>Execute Audit Across {parsedTargets.length} Domains</span>
-                </>
-              )}
-            </button>
+          {/* Concurrency Threads Tuning for Batch Recon */}
+          <div className="pt-3 border-t border-slate-800 mt-2 flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-1.5 text-slate-400">
+              <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="font-mono text-[11px]">Audit Threads:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded border border-slate-800">
+                {[5, 10, 15, 20].map(tVal => (
+                  <button
+                    key={tVal}
+                    type="button"
+                    onClick={() => setThreads(tVal)}
+                    disabled={isScanning}
+                    className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded transition ${
+                      threads === tVal
+                        ? 'bg-cyan-600 text-white shadow'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {tVal}T
+                  </button>
+                ))}
+              </div>
+              <input
+                type="number"
+                min="1"
+                max="25"
+                value={threads}
+                onChange={e => setThreads(Math.max(1, Math.min(25, Number(e.target.value))))}
+                disabled={isScanning}
+                className="w-10 px-1 py-0.5 bg-slate-950 border border-slate-800 rounded text-center text-cyan-300 font-mono text-[11px] font-bold"
+              />
+            </div>
+          </div>
+
+          {/* Action Launch & Cancel Bar */}
+          <div className="pt-3 border-t border-slate-800 mt-2 space-y-2">
+            {isScanning ? (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 bg-cyan-950 border border-cyan-800 text-cyan-300">
+                  <RotateCw className="w-4 h-4 animate-spin text-cyan-400 shrink-0" />
+                  <span className="truncate">Auditing {parsedTargets.length} Domains ({threads} Threads)...</span>
+                </div>
+                <button
+                  id="cancel-batch-scan-btn"
+                  onClick={handleCancelBatchScan}
+                  className="py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-500 text-white border border-red-500 shadow-md shadow-red-950 transition active:scale-95 animate-pulse shrink-0 cursor-pointer"
+                  title="Cancel batch audit immediately (ESC)"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <span>Cancel (ESC)</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                id="start-batch-scan-btn"
+                disabled={parsedTargets.length === 0}
+                onClick={handleStartBatchScan}
+                className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-lg transition ${
+                  parsedTargets.length === 0
+                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-cyan-950 cursor-pointer'
+                }`}
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>Execute Audit Across {parsedTargets.length} Domains ({threads} Threads)</span>
+              </button>
+            )}
 
             {isScanning && (
               <div className="text-[11px] font-mono text-center text-cyan-400 animate-pulse">
-                Auditing subdomains with {selectedTemplateIds.length} YAML templates...
+                Auditing subdomains with {selectedTemplateIds.length} YAML templates concurrently...
               </div>
             )}
           </div>

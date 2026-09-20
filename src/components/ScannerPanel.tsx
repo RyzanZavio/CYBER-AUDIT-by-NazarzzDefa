@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Shield,
   Play,
+  Square,
+  Cpu,
+  Zap,
   Settings2,
   ChevronDown,
   ChevronUp,
@@ -12,6 +15,8 @@ import {
   CheckCircle,
   FileDown,
   ExternalLink,
+  Sliders,
+  AlertTriangle,
 } from 'lucide-react';
 import { ScanResult, YamlTemplate } from '../types';
 import { generatePdfReport } from '../utils/pdfGenerator';
@@ -19,7 +24,8 @@ import { generatePdfReport } from '../utils/pdfGenerator';
 interface ScannerPanelProps {
   templates: YamlTemplate[];
   isScanning: boolean;
-  onStartScan: (targetUrl: string, selectedTemplateIds: string[], timeoutMs: number) => Promise<void>;
+  onStartScan: (targetUrl: string, selectedTemplateIds: string[], timeoutMs: number, threads?: number) => Promise<void>;
+  onCancelScan?: () => void;
   lastScan: ScanResult | null;
   onViewFindingsTab: () => void;
 }
@@ -28,6 +34,7 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
   templates,
   isScanning,
   onStartScan,
+  onCancelScan,
   lastScan,
   onViewFindingsTab,
 }) => {
@@ -37,12 +44,31 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
   );
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [timeoutSec, setTimeoutSec] = useState<number>(8);
+  const [threads, setThreads] = useState<number>(10);
+
+  // Allow ESC key to immediately cancel active audit
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isScanning && onCancelScan) {
+        onCancelScan();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isScanning, onCancelScan]);
 
   const presets = [
     { label: 'smkn3kotabekasi.sch.id (Audit Target)', url: 'https://smkn3kotabekasi.sch.id' },
     { label: 'Local Dev App (Port 3000)', url: 'http://localhost:3000' },
     { label: 'OWASP Official Portal', url: 'https://owasp.org' },
     { label: 'Httpbin Testbed', url: 'https://httpbin.org' },
+  ];
+
+  const threadPresets = [
+    { label: '1 (Stealth/IDS Evasion)', value: 1, desc: 'Safe for sensitive targets' },
+    { label: '5 (Balanced)', value: 5, desc: 'Default safe concurrency' },
+    { label: '10 (Fast Audit)', value: 10, desc: 'High-throughput security testing' },
+    { label: '20 (Turbo Mode)', value: 20, desc: 'Maximum worker concurrency' },
   ];
 
   const handleToggleTemplate = (id: string) => {
@@ -61,7 +87,7 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
 
   const handleLaunch = () => {
     if (!targetUrl.trim() || isScanning) return;
-    onStartScan(targetUrl.trim(), selectedTemplateIds, timeoutSec * 1000);
+    onStartScan(targetUrl.trim(), selectedTemplateIds, timeoutSec * 1000, threads);
   };
 
   const enabledCount = selectedTemplateIds.length;
@@ -79,15 +105,22 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
               </h2>
             </div>
             <p className="text-xs text-slate-400">
-              Audits web applications against OWASP Top 10, Nuclei templates, and Burp Suite heuristics.
+              Audits web applications against OWASP Top 10, Nuclei templates, and Burp Suite heuristics with multi-threaded execution.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-400">Selected Templates:</span>
-            <span className="px-2 py-0.5 rounded font-mono font-bold bg-cyan-950 text-cyan-400 border border-cyan-800">
-              {enabledCount} of {templates.length}
-            </span>
+          <div className="flex items-center gap-3 text-xs flex-wrap">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800">
+              <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-slate-400 font-mono">Threads:</span>
+              <span className="text-cyan-300 font-mono font-bold">{threads}</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/80 border border-cyan-800">
+              <span className="text-slate-300">Templates:</span>
+              <span className="font-mono font-bold text-cyan-300">
+                {enabledCount} of {templates.length}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -110,27 +143,41 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
               />
             </div>
 
-            <button
-              id="start-scan-btn"
-              onClick={handleLaunch}
-              disabled={isScanning || !targetUrl.trim() || enabledCount === 0}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white shadow-lg shadow-cyan-950 transition active:scale-95 whitespace-nowrap"
-            >
-              {isScanning ? (
-                <>
-                  <Radio className="w-4 h-4 animate-spin text-cyan-200" />
-                  <span>Auditing Target...</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>Start Vulnerability Audit</span>
-                </>
-              )}
-            </button>
+            {/* Launch or Cancel Button */}
+            {isScanning ? (
+              <div className="flex items-center gap-2">
+                <button
+                  id="scanning-status-badge"
+                  disabled
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-semibold bg-cyan-950 border border-cyan-800 text-cyan-300 cursor-wait whitespace-nowrap"
+                >
+                  <Radio className="w-4 h-4 animate-spin text-cyan-400" />
+                  <span>Auditing ({threads} Threads)...</span>
+                </button>
+                <button
+                  id="cancel-scan-btn"
+                  onClick={onCancelScan}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-950 border border-red-500 transition active:scale-95 whitespace-nowrap animate-pulse"
+                  title="Immediately abort active worker threads and cancel audit (ESC)"
+                >
+                  <Square className="w-4 h-4 fill-current" />
+                  <span>Cancel Audit (ESC)</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                id="start-scan-btn"
+                onClick={handleLaunch}
+                disabled={!targetUrl.trim() || enabledCount === 0}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white shadow-lg shadow-cyan-950 transition active:scale-95 whitespace-nowrap"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>Start Vulnerability Audit</span>
+              </button>
+            )}
           </div>
 
-          {/* Preset Buttons */}
+          {/* Quick Target Presets */}
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <span className="text-[11px] text-slate-500">Quick Targets:</span>
             {presets.map((preset, pIdx) => (
@@ -147,16 +194,87 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
           </div>
         </div>
 
+        {/* Dedicated Thread & Concurrency Controller */}
+        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs font-semibold text-white font-mono">CONCURRENCY & THREAD CONTROLLER</span>
+              <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-cyan-950 text-cyan-400 border border-cyan-800">
+                {threads} WORKERS
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Configure concurrent worker pool size to balance speed against server load and IDS/IPS detection.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-lg border border-slate-800">
+              {threadPresets.map(tp => (
+                <button
+                  key={tp.value}
+                  type="button"
+                  onClick={() => setThreads(tp.value)}
+                  disabled={isScanning}
+                  className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold transition ${
+                    threads === tp.value
+                      ? 'bg-cyan-600 text-white shadow'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  }`}
+                  title={tp.desc}
+                >
+                  {tp.value}T
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="1"
+                max="25"
+                value={threads}
+                onChange={e => setThreads(Number(e.target.value))}
+                disabled={isScanning}
+                className="w-24 accent-cyan-500 cursor-pointer"
+              />
+              <input
+                type="number"
+                min="1"
+                max="25"
+                value={threads}
+                onChange={e => setThreads(Math.max(1, Math.min(25, Number(e.target.value))))}
+                disabled={isScanning}
+                className="w-12 px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-center text-cyan-300 font-mono text-xs font-bold"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Scan Status Ribbon if running or recently completed */}
         {lastScan && (
           <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
-              <span className="text-slate-300">
-                Latest audit on <span className="font-mono text-cyan-300">{lastScan.targetUrl}</span>:{' '}
-                <strong className="text-white">{lastScan.findings.length} findings</strong> in{' '}
-                {((lastScan.durationMs || 1000) / 1000).toFixed(1)}s
-              </span>
+              {lastScan.status === 'cancelled' ? (
+                <>
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-slate-300">
+                    Audit on <span className="font-mono text-cyan-300">{lastScan.targetUrl}</span> was{' '}
+                    <strong className="text-amber-400 uppercase font-mono">CANCELLED</strong> after{' '}
+                    {((lastScan.durationMs || 500) / 1000).toFixed(1)}s ({lastScan.findings.length} findings identified before abort)
+                  </span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="text-slate-300">
+                    Latest audit on <span className="font-mono text-cyan-300">{lastScan.targetUrl}</span>:{' '}
+                    <strong className="text-white">{lastScan.findings.length} findings</strong> across {lastScan.threads || 5} threads in{' '}
+                    {((lastScan.durationMs || 1000) / 1000).toFixed(1)}s
+                  </span>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-2 self-end sm:self-center">
@@ -186,7 +304,7 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
           >
             <div className="flex items-center gap-1.5">
               <Settings2 className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="font-medium">Audit Templates Selection & Engine Tuning</span>
+              <span className="font-medium">Audit Templates Selection &amp; Engine Tuning</span>
             </div>
             {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
@@ -284,3 +402,4 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
     </div>
   );
 };
+
