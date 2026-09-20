@@ -6,27 +6,25 @@ Dilengkapi dengan mesin agregasi temuan (*Finding Aggregation Engine*), kalkulas
 
 ---
 
-## 📑 Daftar Isi
+## Daftar Isi
 
-- [Fitur Utama](#-fitur-utama)
-- [Persyaratan Sistem](#-persyaratan-sistem)
-- [Setup & Instalasi Dependensi](#-setup--instalasi-dependensi)
-  - [Opsi A: Python CLI (Paling Ringkas & Bebas Ribet)](#opsi-a-python-cli-paling-ringkas--bebas-ribet)
-  - [Opsi B: 1-Click Setup Skrip (Otomatis Global)](#opsi-b-1-click-setup-skrip-otomatis-global)
-  - [Opsi C: Bun (Instalasi Kilat untuk Web GUI)](#opsi-c-bun-instalasi-kilat-untuk-web-gui)
-  - [Opsi D: NPM Tradisional](#opsi-d-npm-tradisional)
-- [Panduan Penggunaan CLI (Usage Examples)](#-panduan-penggunaan-cli-usage-examples)
+- [Fitur Utama](#fitur-utama)
+- [Persyaratan Sistem](#persyaratan-sistem)
+- [Setup & Instalasi Dependensi](#setup--instalasi-dependensi)
+  - [1. Klon Repositori](#1-klon-repositori)
+  - [2. Pemasangan Dependensi](#2-pemasangan-dependensi)
+- [Panduan Penggunaan CLI (Usage Examples)](#panduan-penggunaan-cli-usage-examples)
   - [Tabel Parameter Argumen CLI](#tabel-parameter-argumen-cli)
   - [Contoh Perintah Eksekusi Praktis](#contoh-perintah-eksekusi-praktis)
-- [Panduan Penggunaan Antarmuka Web (Web GUI)](#-panduan-penggunaan-antarmuka-web-web-gui)
-- [Konfigurasi Upstream Proxy (Burp Suite, ZAP, Tor)](#-konfigurasi-upstream-proxy-burp-suite-zap-tor)
-- [Struktur Berkas Proyek](#-struktur-berkas-proyek)
-- [Penafian Etika Keamanan (Disclaimer)](#-penafian-etika-keamanan-disclaimer)
-- [Lisensi](#-lisensi)
+- [Panduan Penggunaan Antarmuka Web (Web GUI)](#panduan-penggunaan-antarmuka-web-web-gui)
+- [Konfigurasi Upstream Proxy (Burp Suite, ZAP, Tor)](#konfigurasi-upstream-proxy-burp-suite-zap-tor)
+- [Struktur Berkas Proyek](#struktur-berkas-proyek)
+- [Penafian Etika Keamanan (Disclaimer)](#penafian-etika-keamanan-disclaimer)
+- [Lisensi](#lisensi)
 
 ---
 
-## 🚀 Fitur Utama
+## Fitur Utama
 
 ### 1. Mesin Audit Cerdas & Aggregation Engine
 - **Agregasi Otomatis (Deduplikasi)**: Masalah *missing security headers* (CSP, X-Frame-Options, HSTS, X-Content-Type-Options) dikonsolidasikan menjadi 1 Temuan Induk (*Aggregated Parent Finding*) dengan sub-checks terstruktur agar laporan rapi dan tidak *inflated*.
@@ -43,7 +41,7 @@ Dilengkapi dengan mesin agregasi temuan (*Finding Aggregation Engine*), kalkulas
 
 ---
 
-## 📦 Persyaratan Sistem
+## Persyaratan Sistem
 
 Pilih salah satu lingkungan yang paling nyaman untuk Anda:
 
@@ -56,11 +54,22 @@ Pilih salah satu lingkungan yang paling nyaman untuk Anda:
 
 ---
 
-## 🛠 Setup & Instalasi Dependensi
+## Setup & Instalasi Dependensi
+
+### 1. Klon Repositori
+
+Salin repositori ke direktori kerja lokal Anda:
+
+```bash
+git clone https://github.com/rayzanzavio/cyber-audit.git
+cd cyber-audit
+```
+
+### 2. Pemasangan Dependensi
 
 Pilihlah salah satu cara termudah berikut untuk memasang dependensi tanpa kerumitan:
 
-### ⚡ Opsi 1: `make install` (Rekomendasi Utama)
+#### Opsi 1: `make install` (Rekomendasi Utama)
 Dengan satu perintah, Makefile akan secara otomatis menginstal dependensi Python (`requirements.txt`) dan dependensi Web GUI (`Bun`/`pnpm`/`npm`):
 
 ```bash
@@ -76,7 +85,7 @@ make scan TARGET=https://example.com SEVERITY=high
 
 ---
 
-### 🚀 Opsi 2: 1-Click Setup Skrip (`setup.sh`)
+#### Opsi 2: 1-Click Setup Skrip (`setup.sh`)
 Skrip `setup.sh` akan mendeteksi lingkungan Anda secara otomatis (Python/Bun/NPM), memasang dependensi, dan mendaftarkan perintah global `cyber-audit` serta `cyber-audit-web` ke sistem PATH.
 
 ```bash
@@ -94,7 +103,7 @@ cyber-audit -u https://example.com -p high
 
 ---
 
-### 🐍 Opsi 3: Python CLI Murni (Tanpa Node/NPM)
+#### Opsi 3: Python CLI Murni (Tanpa Node/NPM)
 Jika Anda hanya ingin melakukan scanning langsung dari terminal tanpa menjalankan server web:
 
 1. Pasang dependensi dari berkas `requirements.txt`:
@@ -109,7 +118,7 @@ Jika Anda hanya ingin melakukan scanning langsung dari terminal tanpa menjalanka
 
 ---
 
-### ⚡ Opsi 4: Bun (Instalasi Kilat untuk Web GUI)
+#### Opsi 4: Bun (Instalasi Kilat untuk Web GUI)
 Jika Anda ingin menjalankan Web GUI tanpa beban NPM:
 
 ```bash
@@ -123,7 +132,7 @@ Akses di peramban: `http://localhost:3000`
 
 ---
 
-### 📦 Opsi 5: NPM Tradisional
+#### Opsi 5: NPM Tradisional
 Jika Anda tetap ingin menggunakan NPM:
 
 ```bash
@@ -136,7 +145,7 @@ npm run dev
 
 ---
 
-## 💻 Panduan Penggunaan CLI (Usage Examples)
+## Panduan Penggunaan CLI (Usage Examples)
 
 Eksekusi pemindai dapat dilakukan via skrip Python `python3 cyber_audit.py` atau perintah global `cyber-audit`.
 
@@ -186,7 +195,7 @@ python3 cyber_audit.py -l targets.txt -x socks5://127.0.0.1:9050 --timeout 15 -o
 
 ---
 
-## 🖥 Panduan Penggunaan Antarmuka Web (Web GUI)
+## Panduan Penggunaan Antarmuka Web (Web GUI)
 
 1. **Audit Panel**:
    - Masukkan URL target pada kolom pencarian.
@@ -202,7 +211,7 @@ python3 cyber_audit.py -l targets.txt -x socks5://127.0.0.1:9050 --timeout 15 -o
 
 ---
 
-## 🔌 Konfigurasi Upstream Proxy (Burp Suite, ZAP, Tor)
+## Konfigurasi Upstream Proxy (Burp Suite, ZAP, Tor)
 
 | Perangkat Lunak | URL Proxy Standar | Catatan Konfigurasi |
 | :--- | :--- | :--- |
@@ -213,13 +222,14 @@ python3 cyber_audit.py -l targets.txt -x socks5://127.0.0.1:9050 --timeout 15 -o
 
 ---
 
-## 📁 Struktur Berkas Proyek
+## Struktur Berkas Proyek
 
 ```text
 ├── cyber_audit.py            # Standalone Python CLI Auditor
 ├── requirements.txt          # Spesifikasi dependensi Python (requests, urllib3, rich, dll)
 ├── pyproject.toml            # Metadata build & packaging Python modern
 ├── setup.sh                  # One-Click Setup & Global CLI Installer (Bash)
+├── Makefile                  # Perintah otomatisasi build & instalasi
 ├── LICENSE                   # Lisensi Open-Source (MIT License)
 ├── README.md                 # Dokumentasi panduan lengkap
 ├── server.ts                 # Backend Server & API Gateway (Express + Vite)
@@ -237,7 +247,7 @@ python3 cyber_audit.py -l targets.txt -x socks5://127.0.0.1:9050 --timeout 15 -o
 
 ---
 
-## ⚖️ Penafian Etika Keamanan (Disclaimer)
+## Penafian Etika Keamanan (Disclaimer)
 
 > **PERINGATAN PENTING**: 
 > Perangkat lunak ini dibuat dan didistribusikan semata-mata untuk tujuan **pengujian keamanan yang sah (*authorized penetration testing*)**, audit kepatuhan internal (*security compliance*), penelitian kerentanan defensif (*defensive hardening*), dan kegiatan *bug bounty* resmi.
@@ -246,6 +256,6 @@ python3 cyber_audit.py -l targets.txt -x socks5://127.0.0.1:9050 --timeout 15 -o
 
 ---
 
-## 📄 Lisensi
+## Lisensi
 
 Proyek ini dilisensikan di bawah lisensi terbuka **MIT License**. Lihat berkas [LICENSE](./LICENSE) untuk rincian lengkap.
