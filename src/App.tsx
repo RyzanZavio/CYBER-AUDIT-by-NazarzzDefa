@@ -16,9 +16,11 @@ import {
   Radio,
   Palette,
   Sliders,
+  ShieldAlert,
 } from 'lucide-react';
 import { DEFAULT_TEMPLATES } from './data/defaultTemplates';
 import { DEFAULT_EXTENSIONS } from './data/defaultExtensions';
+import { CVE_DATABASE } from './data/cveDatabase';
 import {
   BatchScanSummary,
   ExtensionManifest,
@@ -35,6 +37,7 @@ import { TerminalView } from './components/TerminalView';
 import { ScannerPanel } from './components/ScannerPanel';
 import { FindingsList } from './components/FindingsList';
 import { TemplateManager } from './components/TemplateManager';
+import { CveDatabaseExplorer } from './components/CveDatabaseExplorer';
 import { WebhookSettings } from './components/WebhookSettings';
 import { SchedulerAndCliGuide } from './components/SchedulerAndCliGuide';
 import { BatchScanner } from './components/BatchScanner';
@@ -47,6 +50,7 @@ import { generatePdfReport } from './utils/pdfGenerator';
 type TabId =
   | 'workbench'
   | 'scanner'
+  | 'cve'
   | 'batch'
   | 'findings'
   | 'templates'
@@ -500,6 +504,39 @@ export default function App() {
     }
   };
 
+  const handleEnableAllCves = async (cveIds?: string[]) => {
+    try {
+      const res = await fetch('/api/cves/enable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cveIds ? { cveIds } : { enableAll: true }),
+      });
+      if (res.ok) {
+        await fetchTemplates();
+        if (visualSettings.enableSoundFx) {
+          cyberSound.playPing('success', visualSettings.soundVolume);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to enable CVE templates:', err);
+    }
+  };
+
+  const handleToggleCveTemplate = async (templateId: string) => {
+    const existing = templates.find(t => t.id === templateId);
+    if (existing) {
+      await handleUpdateTemplate({ ...existing, enabled: !existing.enabled });
+    } else {
+      // Find from CVE database and enable it
+      const cveItem = CVE_DATABASE.find(
+        c => (c.templateId || c.cveId.toLowerCase()) === templateId
+      );
+      if (cveItem) {
+        await handleUpdateTemplate({ ...cveItem.yamlTemplate, enabled: true });
+      }
+    }
+  };
+
   const handleBatchCompleted = (summary: BatchScanSummary) => {
     const allFindings = Object.values(summary.resultsByTarget || {}).flatMap(
       r => r.findings || []
@@ -591,6 +628,14 @@ export default function App() {
                 {visualSettings.theme.replace('-', ' ')}
               </span>
             </button>
+
+            <div
+              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/30 border border-emerald-800/60 text-emerald-300 text-xs font-mono"
+              title="Persistent Storage: YAML templates, CVEs, extensions, and configs are securely saved to server disk (./data)"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>DB: Local JSON (Persisted)</span>
+            </div>
 
             <button
               onClick={() => handleTabChange('proxy')}
@@ -705,6 +750,22 @@ export default function App() {
           </button>
 
           <button
+            id="tab-cve-btn"
+            onClick={() => handleTabChange('cve')}
+            className={`px-3.5 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+              activeTab === 'cve'
+                ? 'border-cyan-400 text-cyan-400 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>CVE Database ({CVE_DATABASE.length})</span>
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-amber-950 text-amber-400 border border-amber-800 font-bold">
+              KEV
+            </span>
+          </button>
+
+          <button
             id="tab-templates-btn"
             onClick={() => handleTabChange('templates')}
             className={`px-3.5 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
@@ -714,7 +775,7 @@ export default function App() {
             }`}
           >
             <FileCode className="w-3.5 h-3.5" />
-            <span>YAML ({templates.length})</span>
+            <span>YAML Templates ({templates.length})</span>
           </button>
 
           <button
@@ -832,6 +893,15 @@ export default function App() {
               />
             </div>
           </div>
+        )}
+
+        {/* Tab: CVE Intelligence & Threat Database */}
+        {activeTab === 'cve' && (
+          <CveDatabaseExplorer
+            activeTemplates={templates}
+            onToggleTemplate={handleToggleCveTemplate}
+            onEnableAllCves={handleEnableAllCves}
+          />
         )}
 
         {/* Tab 2: Subfinder & Batch Recon */}

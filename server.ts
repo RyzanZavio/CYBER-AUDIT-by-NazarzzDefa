@@ -1,9 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { DEFAULT_TEMPLATES } from './src/data/defaultTemplates';
-import { DEFAULT_EXTENSIONS } from './src/data/defaultExtensions';
-import { syncTemplateWithYaml } from './src/utils/templateParser';
+import { db } from './server/storage';
 import {
   ExtensionManifest,
   ProxyConfig,
@@ -17,53 +15,19 @@ import { sendWebhookNotification } from './server/webhook';
 import { getScheduleState, initializeScheduler, updateSchedule } from './server/scheduler';
 import { generateLinuxWslCliScript } from './server/cli-script';
 import { validateTargetUrl } from './server/ssrf-validator';
+import {
+  fetchNvdCveById,
+  searchNvdCves,
+  testNvdApiKeyStatus,
+  NVD_API_KEY,
+} from './server/nvd';
 
 const PORT = 3000;
 
-// In-memory state
-let currentTemplates: YamlTemplate[] = JSON.parse(JSON.stringify(DEFAULT_TEMPLATES));
-let currentWebhookConfig: WebhookConfig = {
-  type: 'discord',
-  url: '',
-  enabled: false,
-  minSeverity: 'medium',
-  channelName: '#security-alerts',
-};
-let currentProxyConfig: ProxyConfig = {
-  enabled: false,
-  url: 'http://127.0.0.1:8080',
-  insecureSkipVerify: true,
-  customUserAgent: 'Mozilla/5.0 (compatible; DevSecOps-Auditor/2.4; +https://owasp.org)',
-};
-let currentExtensions: ExtensionManifest[] = JSON.parse(JSON.stringify(DEFAULT_EXTENSIONS));
-let lastScanResult: ScanResult | null = null;
-
-function syncExtensionTemplates() {
-  const baseBuiltins: YamlTemplate[] = JSON.parse(JSON.stringify(DEFAULT_TEMPLATES));
-  const activeExtTemplates: YamlTemplate[] = [];
-
-  for (const ext of currentExtensions) {
-    if (ext.installed && ext.enabled && Array.isArray(ext.templates)) {
-      for (const tpl of ext.templates) {
-        activeExtTemplates.push({ ...tpl, isBuiltin: false });
-      }
-    }
-  }
-
-  // Preserve user custom templates
-  const userCustom = currentTemplates.filter(
-    t =>
-      !DEFAULT_TEMPLATES.some(dt => dt.id === t.id) &&
-      !currentExtensions.some(ext => ext.templates.some(et => et.id === t.id))
-  );
-
-  currentTemplates = [...baseBuiltins, ...activeExtTemplates, ...userCustom];
-}
-
-// Initial sync of extension templates
-syncExtensionTemplates();
-
 async function startServer() {
+  // 1. Initialize persistent storage database on disk (creates ./data directory and json flat-files if missing)
+  await db.init();
+
   const app = express();
 
   // Disable x-powered-by banner header
@@ -124,32 +88,57 @@ async function startServer() {
     });
   };
 
-  // Helper functions for scheduler
-  const getTemplates = () => currentTemplates;
-  const getWebhookConfig = () => currentWebhookConfig;
+  // Initialize background daily scheduler with persistent storage callbacks
+  initializeScheduler(
+    () => db.getTemplates(),
+    () => db.getWebhookConfig(),
+    db.getScheduleConfig(),
+    async (result) => {
+      await db.saveScanResult(result);
+    }
+  );
 
-  // Initialize background daily scheduler
-  initializeScheduler(getTemplates, getWebhookConfig);
-
-  // Health endpoint
+  // Health & Storage Diagnostic endpoint
   app.get('/api/health', (req, res) => {
     res.json({
       status: 'ok',
       engine: 'OWASP / Nuclei / Burp Suite Pro Hybrid Scanner',
       version: '2.4.0',
-      templatesCount: currentTemplates.length,
+      storageEngine: 'Local Persistent JSON Flat-File Database',
+      templatesCount: db.getTemplates().length,
+      cvesCount: db.getCves().length,
+      extensionsCount: db.getExtensions().length,
+      storage: db.getStorageStats(),
       scheduler: getScheduleState().config.status,
       ssrfProtection: true,
       authEnabled: !!process.env.AUDIT_API_KEY,
     });
   });
 
-  // Templates endpoints
-  app.get('/api/templates', (req, res) => {
-    res.json(currentTemplates);
+  // Storage Stats & Backup Management Endpoints
+  app.get('/api/storage/status', (req, res) => {
+    res.json(db.getStorageStats());
   });
 
-  app.post('/api/templates', apiKeyAuthMiddleware, (req, res) => {
+  app.post('/api/storage/backup', apiKeyAuthMiddleware, async (req, res) => {
+    try {
+      const backupInfo = await db.createBackup();
+      res.json({
+        success: true,
+        message: 'Database backup snapshot created successfully on server filesystem',
+        ...backupInfo,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Templates CRUD endpoints (Persisted to ./data/templates.json)
+  app.get('/api/templates', (req, res) => {
+    res.json(db.getTemplates());
+  });
+
+  app.post('/api/templates', apiKeyAuthMiddleware, async (req, res) => {
     const templateInput = req.body;
     if (!templateInput || !templateInput.rawYaml) {
       res.status(400).json({ error: 'Template must contain rawYaml' });
@@ -157,35 +146,230 @@ async function startServer() {
     }
 
     try {
-      const syncedTemplate = syncTemplateWithYaml(templateInput);
-      const existingIndex = currentTemplates.findIndex(t => t.id === syncedTemplate.id);
-      if (existingIndex >= 0) {
-        currentTemplates[existingIndex] = {
-          ...currentTemplates[existingIndex],
-          ...syncedTemplate,
-          isBuiltin: currentTemplates[existingIndex].isBuiltin,
-        };
-      } else {
-        currentTemplates.push({ ...syncedTemplate, isBuiltin: false });
-      }
-      res.json({ success: true, template: syncedTemplate });
+      const savedTemplate = await db.saveTemplate(templateInput);
+      res.json({ success: true, template: savedTemplate, totalTemplates: db.getTemplates().length });
     } catch (err: any) {
       res.status(400).json({ error: `Invalid YAML template structure: ${err.message}` });
     }
   });
 
-  app.delete('/api/templates/:id', apiKeyAuthMiddleware, (req, res) => {
+  app.delete('/api/templates/:id', apiKeyAuthMiddleware, async (req, res) => {
     const id = req.params.id;
-    currentTemplates = currentTemplates.filter(t => t.id !== id);
-    res.json({ success: true, message: `Template ${id} removed` });
+    const deleted = await db.deleteTemplate(id);
+    res.json({ success: deleted, message: `Template ${id} removed`, totalTemplates: db.getTemplates().length });
   });
 
-  app.post('/api/templates/reset', apiKeyAuthMiddleware, (req, res) => {
-    currentTemplates = JSON.parse(JSON.stringify(DEFAULT_TEMPLATES));
-    res.json({ success: true, templates: currentTemplates });
+  app.post('/api/templates/reset', apiKeyAuthMiddleware, async (req, res) => {
+    const templates = await db.resetTemplates();
+    res.json({ success: true, templates, totalTemplates: templates.length });
   });
 
-  // Scan endpoint with SSRF and Protocol Validation
+  app.post('/api/templates/:id/toggle', apiKeyAuthMiddleware, async (req, res) => {
+    const { id } = req.params;
+    const { enabled } = req.body;
+    const updated = await db.setTemplateEnabled(id, !!enabled);
+    if (!updated) {
+      res.status(404).json({ error: `Template ${id} not found` });
+      return;
+    }
+    res.json({ success: true, template: updated });
+  });
+
+  // CVE Database Endpoints (Persisted to ./data/cves.json)
+  app.get('/api/cves', (req, res) => {
+    const { q, severity, isKev, tech, year } = req.query;
+    const list = db.getCves({
+      query: typeof q === 'string' ? q : undefined,
+      severity: typeof severity === 'string' ? severity : undefined,
+      isKev: isKev === 'true',
+      tech: typeof tech === 'string' ? tech : undefined,
+      year: typeof year === 'string' ? year : undefined,
+    });
+
+    res.json({
+      total: list.length,
+      cves: list,
+      activeTemplateCount: db.getTemplates().length,
+    });
+  });
+
+  app.get('/api/cves/:cveId', (req, res) => {
+    const { cveId } = req.params;
+    const found = db.getCveById(cveId);
+    if (!found) {
+      res.status(404).json({ error: `CVE ${cveId} not found in database.` });
+      return;
+    }
+    res.json(found);
+  });
+
+  app.post('/api/cves/enable', apiKeyAuthMiddleware, async (req, res) => {
+    try {
+      const { cveIds, enableAll } = req.body;
+      const result = await db.enableCveTemplates({ cveIds, enableAll });
+
+      res.json({
+        success: true,
+        message: `Activated CVE templates (${result.addedCount} newly added to active scan pool, ${result.activatedCount} enabled).`,
+        addedCount: result.addedCount,
+        activatedCount: result.activatedCount,
+        totalTemplates: result.totalTemplates,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/cves', apiKeyAuthMiddleware, async (req, res) => {
+    try {
+      const cveInput = req.body;
+      if (!cveInput.cveId || !cveInput.name) {
+        res.status(400).json({ error: 'CVE record must include cveId and name' });
+        return;
+      }
+      const saved = await db.saveCve(cveInput);
+      res.json({ success: true, cve: saved, totalCves: db.getCves().length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/cves/reset', apiKeyAuthMiddleware, async (req, res) => {
+    try {
+      const resetList = await db.resetCves();
+      res.json({ success: true, message: 'CVE Database reset to default catalogue', count: resetList.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // NIST NVD 2.0 Real-time Intelligence & CVSS Integration Endpoints
+  app.get('/api/nvd/status', async (req, res) => {
+    try {
+      const status = await testNvdApiKeyStatus();
+      res.json(status);
+    } catch (err: any) {
+      res.status(500).json({ connected: false, error: err.message });
+    }
+  });
+
+  app.get('/api/nvd/lookup/:cveId', async (req, res) => {
+    try {
+      const { cveId } = req.params;
+      const detail = await fetchNvdCveById(cveId);
+      if (!detail) {
+        res.status(404).json({ error: `CVE record "${cveId}" not found in NIST National Vulnerability Database.` });
+        return;
+      }
+      res.json(detail);
+    } catch (err: any) {
+      console.error(`[NVD] Lookup error for ${req.params.cveId}:`, err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/nvd/search', async (req, res) => {
+    try {
+      const q = typeof req.query.q === 'string' ? req.query.q : '';
+      if (!q.trim()) {
+        res.status(400).json({ error: 'Search query parameter "q" is required.' });
+        return;
+      }
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 12;
+      const results = await searchNvdCves(q, limit);
+      res.json({ total: results.length, query: q, results });
+    } catch (err: any) {
+      console.error(`[NVD] Search error for query "${req.query.q}":`, err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/nvd/import', apiKeyAuthMiddleware, async (req, res) => {
+    try {
+      const { cveId } = req.body;
+      if (!cveId) {
+        res.status(400).json({ error: 'cveId is required for NIST NVD import.' });
+        return;
+      }
+
+      const detail = await fetchNvdCveById(cveId);
+      if (!detail || !detail.generatedYamlTemplate) {
+        res.status(404).json({ error: `Could not retrieve CVE "${cveId}" from NIST NVD.` });
+        return;
+      }
+
+      const cveItem = {
+        cveId: detail.cveId,
+        name: detail.name,
+        cvssScore: detail.cvss.baseScore,
+        severity: detail.cvss.severity,
+        cweId: detail.cweId,
+        owaspCategory: detail.owaspCategory,
+        affectedTech: detail.affectedTech,
+        description: detail.description,
+        vector: detail.cvss.vectorString,
+        remediation: `Upgrade affected software or apply NIST/Vendor patch for ${detail.cveId}`,
+        referenceUrl: `https://nvd.nist.gov/vuln/detail/${detail.cveId}`,
+        publishedDate: detail.publishedDate,
+        isKev: detail.isKev,
+        accuracyRate: 99.2,
+        templateId: detail.generatedYamlTemplate.id,
+        detectionAvailable: true,
+        yamlTemplate: detail.generatedYamlTemplate,
+      };
+
+      // Save to persistent database
+      const savedCve = await db.saveCve(cveItem);
+      const savedTpl = await db.saveTemplate(detail.generatedYamlTemplate);
+
+      res.json({
+        success: true,
+        message: `Successfully imported ${detail.cveId} from NIST NVD and activated its YAML probe!`,
+        cve: savedCve,
+        template: savedTpl,
+        totalCves: db.getCves().length,
+        totalTemplates: db.getTemplates().length,
+      });
+    } catch (err: any) {
+      console.error(`[NVD] Import error:`, err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/nvd/sync-all', apiKeyAuthMiddleware, async (req, res) => {
+    try {
+      const currentCves = db.getCves();
+      let updatedCount = 0;
+      const syncErrors: { cveId: string; error: string }[] = [];
+
+      for (const cve of currentCves.slice(0, 15)) {
+        try {
+          const detail = await fetchNvdCveById(cve.cveId);
+          if (detail) {
+            cve.cvssScore = detail.cvss.baseScore;
+            cve.severity = detail.cvss.severity;
+            cve.vector = detail.cvss.vectorString;
+            cve.publishedDate = detail.publishedDate || cve.publishedDate;
+            await db.saveCve(cve);
+            updatedCount++;
+          }
+        } catch (subErr: any) {
+          syncErrors.push({ cveId: cve.cveId, error: subErr.message });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `NIST NVD synchronization completed. ${updatedCount} records refreshed with official CVSS scores.`,
+        updatedCount,
+        errors: syncErrors,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Scan endpoint with SSRF, Protocol Validation, and Persistence
   app.post('/api/scan', apiKeyAuthMiddleware, async (req, res) => {
     try {
       const { targetUrl, templateIds, timeoutMs, webhook, allowInternal } = req.body;
@@ -208,13 +392,14 @@ async function startServer() {
 
       const validatedUrl = targetValidation.normalizedUrl || targetUrl;
 
-      // Filter templates
-      let templatesToRun = currentTemplates.filter(t => t.enabled);
+      // Filter templates from persistent storage
+      let templatesToRun = db.getTemplates().filter(t => t.enabled);
       if (Array.isArray(templateIds) && templateIds.length > 0) {
         templatesToRun = templatesToRun.filter(t => templateIds.includes(t.id));
       }
 
-      const effectiveProxy = req.body.proxy || (currentProxyConfig.enabled ? currentProxyConfig : undefined);
+      const proxyConfig = db.getProxyConfig();
+      const effectiveProxy = req.body.proxy || (proxyConfig.enabled ? proxyConfig : undefined);
 
       console.log(`[Scan] Starting scan on target: ${validatedUrl} with ${templatesToRun.length} templates (Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'})`);
 
@@ -235,9 +420,11 @@ async function startServer() {
           },
         });
 
-        lastScanResult = result;
+        // Save scan result to persistent database
+        await db.saveScanResult(result);
 
         // Handle webhook notification if configured
+        const currentWebhookConfig = db.getWebhookConfig();
         const effectiveWebhook: WebhookConfig = webhook || currentWebhookConfig;
         if (effectiveWebhook && effectiveWebhook.enabled && effectiveWebhook.url) {
           const severityOrder = ['info', 'low', 'medium', 'high', 'critical'];
@@ -263,12 +450,13 @@ async function startServer() {
         proxy: effectiveProxy,
       });
 
-      lastScanResult = result;
+      // Save scan result to persistent database
+      await db.saveScanResult(result);
 
       // Handle webhook notification if configured
+      const currentWebhookConfig = db.getWebhookConfig();
       const effectiveWebhook: WebhookConfig = webhook || currentWebhookConfig;
       if (effectiveWebhook && effectiveWebhook.enabled && effectiveWebhook.url) {
-        // Check minSeverity threshold
         const severityOrder = ['info', 'low', 'medium', 'high', 'critical'];
         const thresholdIndex = severityOrder.indexOf(effectiveWebhook.minSeverity || 'medium');
 
@@ -292,9 +480,19 @@ async function startServer() {
     }
   });
 
-  // Last scan result
+  // Last scan result & history
   app.get('/api/scan/last', (req, res) => {
-    res.json(lastScanResult || { status: 'none', findings: [] });
+    res.json(db.getLastScanResult() || { status: 'none', findings: [] });
+  });
+
+  app.get('/api/scan/history', (req, res) => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+    res.json(db.getScanHistory(limit));
+  });
+
+  app.delete('/api/scan/history', apiKeyAuthMiddleware, async (req, res) => {
+    await db.clearScanHistory();
+    res.json({ success: true, message: 'Scan history cleared' });
   });
 
   // Batch Multi-Target Scan endpoint (for subfinder/file drag/drop lists)
@@ -329,8 +527,9 @@ async function startServer() {
         return;
       }
 
-      const effectiveProxy = proxy || (currentProxyConfig.enabled ? currentProxyConfig : undefined);
-      let templatesToRun = currentTemplates.filter(t => t.enabled);
+      const proxyConfig = db.getProxyConfig();
+      const effectiveProxy = proxy || (proxyConfig.enabled ? proxyConfig : undefined);
+      let templatesToRun = db.getTemplates().filter(t => t.enabled);
       if (Array.isArray(templateIds) && templateIds.length > 0) {
         templatesToRun = templatesToRun.filter(t => templateIds.includes(t.id));
       }
@@ -387,6 +586,7 @@ async function startServer() {
       };
 
       // Optional webhook notification for batch completion
+      const currentWebhookConfig = db.getWebhookConfig();
       const effectiveWebhook: WebhookConfig = webhook || currentWebhookConfig;
       if (effectiveWebhook && effectiveWebhook.enabled && effectiveWebhook.url) {
         const dummyResult: ScanResult = {
@@ -412,20 +612,21 @@ async function startServer() {
     }
   });
 
-  // Proxy Configuration & Testing Endpoints
+  // Proxy Configuration & Testing Endpoints (Persisted to ./data/settings.json)
   app.get('/api/proxy', (req, res) => {
-    res.json(currentProxyConfig);
+    res.json(db.getProxyConfig());
   });
 
-  app.post('/api/proxy', apiKeyAuthMiddleware, (req, res) => {
+  app.post('/api/proxy', apiKeyAuthMiddleware, async (req, res) => {
     const config: Partial<ProxyConfig> = req.body;
-    currentProxyConfig = { ...currentProxyConfig, ...config };
-    console.log(`[Proxy] Configuration updated: enabled=${currentProxyConfig.enabled}, url=${currentProxyConfig.url}`);
-    res.json({ success: true, config: currentProxyConfig });
+    const updated = await db.saveProxyConfig(config);
+    console.log(`[Proxy] Configuration updated: enabled=${updated.enabled}, url=${updated.url}`);
+    res.json({ success: true, config: updated });
   });
 
   app.post('/api/proxy/test', apiKeyAuthMiddleware, async (req, res) => {
     try {
+      const currentProxyConfig = db.getProxyConfig();
       const proxyToTest: ProxyConfig = req.body.url ? req.body : currentProxyConfig;
       if (!proxyToTest.url) {
         res.status(400).json({ success: false, message: 'Proxy URL cannot be empty (e.g. http://127.0.0.1:8080)' });
@@ -486,27 +687,22 @@ async function startServer() {
     }
   });
 
-  // Extensions Management Endpoints
+  // Extensions Management Endpoints (Persisted to ./data/extensions.json)
   app.get('/api/extensions', (req, res) => {
-    res.json(currentExtensions);
+    res.json(db.getExtensions());
   });
 
-  app.post('/api/extensions/toggle', apiKeyAuthMiddleware, (req, res) => {
+  app.post('/api/extensions/toggle', apiKeyAuthMiddleware, async (req, res) => {
     const { id, enabled } = req.body;
-    const ext = currentExtensions.find(e => e.id === id);
+    const ext = await db.toggleExtension(id, !!enabled);
     if (!ext) {
       res.status(404).json({ error: `Extension with id ${id} not found` });
       return;
     }
-    ext.enabled = !!enabled;
-    if (ext.enabled) {
-      ext.installed = true;
-    }
-    syncExtensionTemplates();
-    res.json({ success: true, extension: ext, totalTemplates: currentTemplates.length });
+    res.json({ success: true, extension: ext, totalTemplates: db.getTemplates().length });
   });
 
-  app.post('/api/extensions/install', apiKeyAuthMiddleware, (req, res) => {
+  app.post('/api/extensions/install', apiKeyAuthMiddleware, async (req, res) => {
     try {
       const manifest: Partial<ExtensionManifest> = req.body;
       if (!manifest.id || !manifest.name) {
@@ -514,7 +710,6 @@ async function startServer() {
         return;
       }
 
-      const existingIndex = currentExtensions.findIndex(e => e.id === manifest.id);
       const newExt: ExtensionManifest = {
         id: manifest.id,
         name: manifest.name,
@@ -530,32 +725,25 @@ async function startServer() {
         downloadUrl: manifest.downloadUrl,
       };
 
-      if (existingIndex >= 0) {
-        currentExtensions[existingIndex] = newExt;
-      } else {
-        currentExtensions.push(newExt);
-      }
-
-      syncExtensionTemplates();
-      res.json({ success: true, extension: newExt, totalTemplates: currentTemplates.length });
+      const saved = await db.saveExtension(newExt);
+      res.json({ success: true, extension: saved, totalTemplates: db.getTemplates().length });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.delete('/api/extensions/:id', apiKeyAuthMiddleware, (req, res) => {
+  app.delete('/api/extensions/:id', apiKeyAuthMiddleware, async (req, res) => {
     const { id } = req.params;
-    currentExtensions = currentExtensions.filter(e => e.id !== id);
-    syncExtensionTemplates();
-    res.json({ success: true, message: `Extension ${id} uninstalled`, totalTemplates: currentTemplates.length });
+    await db.deleteExtension(id);
+    res.json({ success: true, message: `Extension ${id} uninstalled`, totalTemplates: db.getTemplates().length });
   });
 
-  // Webhook settings & test
+  // Webhook settings & test (Persisted to ./data/settings.json)
   app.get('/api/webhook', (req, res) => {
-    res.json(currentWebhookConfig);
+    res.json(db.getWebhookConfig());
   });
 
-  app.post('/api/webhook', apiKeyAuthMiddleware, (req, res) => {
+  app.post('/api/webhook', apiKeyAuthMiddleware, async (req, res) => {
     const config: Partial<WebhookConfig> = req.body;
     if (config.url) {
       const validation = validateTargetUrl(config.url, { requireHttps: true });
@@ -564,12 +752,13 @@ async function startServer() {
         return;
       }
     }
-    currentWebhookConfig = { ...currentWebhookConfig, ...config };
-    res.json({ success: true, config: currentWebhookConfig });
+    const saved = await db.saveWebhookConfig(config);
+    res.json({ success: true, config: saved });
   });
 
   app.post('/api/webhook/test', apiKeyAuthMiddleware, async (req, res) => {
     try {
+      const currentWebhookConfig = db.getWebhookConfig();
       const config: WebhookConfig = req.body.url ? req.body : currentWebhookConfig;
       if (!config.url) {
         res.status(400).json({ success: false, message: 'Webhook URL cannot be blank' });
@@ -639,15 +828,23 @@ async function startServer() {
     }
   });
 
-  // Schedule endpoints
+  // Schedule endpoints (Persisted to ./data/settings.json)
   app.get('/api/schedule', (req, res) => {
     res.json(getScheduleState());
   });
 
-  app.post('/api/schedule', apiKeyAuthMiddleware, (req, res) => {
+  app.post('/api/schedule', apiKeyAuthMiddleware, async (req, res) => {
     try {
       const newConfig = req.body;
-      const state = updateSchedule(newConfig, getTemplates, getWebhookConfig);
+      const state = updateSchedule(
+        newConfig,
+        () => db.getTemplates(),
+        () => db.getWebhookConfig(),
+        async (result) => {
+          await db.saveScanResult(result);
+        }
+      );
+      await db.saveScheduleConfig(state.config);
       res.json(state);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -688,7 +885,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[DevSecOps Server] Running on http://0.0.0.0:${PORT}`);
+    console.log(`[DevSecOps Server] Running on http://0.0.0.0:${PORT} with persistent Local DB Storage`);
   });
 }
 
