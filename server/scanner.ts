@@ -4,6 +4,7 @@ import {
   ProxyConfig,
   ScanLog,
   ScanResult,
+  SubFindingItem,
   VulnerabilityFinding,
   VulnerabilitySeverity,
   YamlTemplate,
@@ -18,17 +19,21 @@ interface ParsedYamlInfo {
   tags?: string;
   classification?: {
     'cvss-score'?: number;
+    'cvss-vector'?: string;
     'cwe-id'?: string;
     'owasp-category'?: string;
   };
 }
 
 interface ParsedMatcher {
-  type: 'word' | 'regex' | 'status' | 'header';
+  type: 'word' | 'regex' | 'status' | 'header' | 'content-type' | 'size';
   part?: 'body' | 'header' | 'all';
   words?: string[];
   regex?: string[];
   status?: number[];
+  'content-type'?: string[];
+  'min-size'?: number;
+  'max-size'?: number;
   negative?: boolean;
   condition?: 'and' | 'or';
 }
@@ -46,6 +51,40 @@ interface ParsedTemplate {
   id: string;
   info: ParsedYamlInfo;
   requests?: ParsedRequest[];
+}
+
+// Check for Soft-404 error page disguised with HTTP 200
+function isSoft404ErrorPage(body: string, path: string): boolean {
+  if (path === '/' || path === '' || path === '{{BaseURL}}/') return false;
+  const lower = body.toLowerCase();
+  
+  // HTML page title / heading indicators of 404
+  if (
+    lower.includes('<title>404') ||
+    lower.includes('<title>page not found') ||
+    lower.includes('<title>not found') ||
+    lower.includes('<title>halaman tidak ditemukan') ||
+    lower.includes('<h1>404') ||
+    lower.includes('<h1>page not found') ||
+    lower.includes('<h1>not found') ||
+    lower.includes('<h1>halaman tidak ditemukan')
+  ) {
+    return true;
+  }
+
+  // JSON error responses
+  if (
+    lower.includes('"status":404') ||
+    lower.includes('"status": 404') ||
+    lower.includes('"error":"not found"') ||
+    lower.includes('"error": "not found"') ||
+    lower.includes('"message":"not found"') ||
+    lower.includes('"message": "not found"')
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export async function executeVulnerabilityScan(
@@ -66,7 +105,7 @@ export async function executeVulnerabilityScan(
     options.userAgent ||
     'Mozilla/5.0 (compatible; DevSecOps-Auditor/2.4; +https://owasp.org)';
 
-  // Setup Upstream Proxy Dispatcher (Burp Suite, OWASP ZAP, Tor, Corporate Gateway)
+  // Setup Upstream Security Proxy Dispatcher (Burp Suite, OWASP ZAP, Tor)
   let dispatcher: any = undefined;
   if (options.proxy?.enabled && options.proxy?.url) {
     try {
@@ -86,11 +125,10 @@ export async function executeVulnerabilityScan(
   if (!/^https?:\/\//i.test(normalizedUrl)) {
     normalizedUrl = `http://${normalizedUrl}`;
   }
-  // Strip trailing slash for template {{BaseURL}} substitution
   normalizedUrl = normalizedUrl.replace(/\/+$/, '');
 
   const logs: ScanLog[] = [];
-  const findings: VulnerabilityFinding[] = [];
+  const rawFindings: VulnerabilityFinding[] = [];
   let requestsSent = 0;
   let templatesExecuted = 0;
 
@@ -138,7 +176,15 @@ export async function executeVulnerabilityScan(
 
     const tplName = parsed?.info?.name || tpl.name;
     const tplSeverity = (parsed?.info?.severity || tpl.severity || 'medium') as VulnerabilitySeverity;
-    const cvssScore = parsed?.info?.classification?.['cvss-score'] ?? (tplSeverity === 'critical' ? 9.5 : tplSeverity === 'high' ? 7.8 : tplSeverity === 'medium' ? 5.2 : 3.0);
+    const defaultCvss = tplSeverity === 'critical' ? 9.1 : tplSeverity === 'high' ? 7.5 : tplSeverity === 'medium' ? 5.3 : tplSeverity === 'low' ? 3.1 : 0.0;
+    const cvssScore = parsed?.info?.classification?.['cvss-score'] ?? defaultCvss;
+    const cvssVector = parsed?.info?.classification?.['cvss-vector'] || 
+      (tplSeverity === 'critical' ? 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' :
+       tplSeverity === 'high' ? 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N' :
+       tplSeverity === 'medium' ? 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N' :
+       tplSeverity === 'low' ? 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N' :
+       'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N');
+
     const cweId = parsed?.info?.classification?.['cwe-id'] || 'CWE-693';
     const owaspCategory = parsed?.info?.classification?.['owasp-category'] || 'A05:2021-Security Misconfiguration';
     const description = parsed?.info?.description || tpl.description;
@@ -166,7 +212,6 @@ export async function executeVulnerabilityScan(
           requestHeaders['Proxy-Authorization'] = `Basic ${Buffer.from(authString).toString('base64')}`;
         }
 
-        // Emit real-time log for payload dispatch
         emitLog(
           'info',
           `[PROBE] Transmitting ${method} ${fullUrl}`,
@@ -209,19 +254,25 @@ export async function executeVulnerabilityScan(
             responseHeaders[key.toLowerCase()] = val;
           });
 
-          // Read response text (limit to 100KB to avoid excessive memory)
+          // Read response text (capped at 100KB)
           const text = await res.text();
           responseBody = text.slice(0, 100000);
         } catch (fetchErr: any) {
           emitLog('warn', `[${tpl.id}] Request error to ${fullUrl}: ${fetchErr.name === 'AbortError' ? 'Connection timeout' : fetchErr.message}`, tpl.id);
-          // Still allow evaluating negative header matchers (e.g. if host is HTTPS check)
         }
 
-        // Evaluate Matchers
+        // Multi-Condition Matcher Engine
         const matchers = reqConfig.matchers || [];
         const matchersCondition = reqConfig['matchers-condition'] || 'and';
         const matcherResults: boolean[] = [];
         let matchedEvidence = '';
+
+        // Anti-False-Positive: Check for Soft-404 if status is 200 on deep probes
+        const isSoft404 = responseStatusCode === 200 && isSoft404ErrorPage(responseBody, rawPath);
+        if (isSoft404 && tpl.id !== 'owasp-security-headers') {
+          emitLog('pass', `[ANTI-FP] Suppressed Soft-404 false positive for ${fullUrl} (Returned 200 with error page text).`, tpl.id);
+          continue;
+        }
 
         for (const matcher of matchers) {
           let matcherSatisfied = false;
@@ -234,6 +285,23 @@ export async function executeVulnerabilityScan(
             matcherSatisfied = isNegative ? !matchStatus : matchStatus;
             if (matcherSatisfied) {
               matchedEvidence += `HTTP Status ${responseStatusCode} matched [${expectedStatuses.join(', ')}]. `;
+            }
+          } else if (matcher.type === 'content-type') {
+            const expectedTypes = matcher['content-type'] || [];
+            const actualContentType = (responseHeaders['content-type'] || '').toLowerCase();
+            const typeMatch = expectedTypes.some(t => actualContentType.includes(t.toLowerCase()));
+            matcherSatisfied = isNegative ? !typeMatch : typeMatch;
+            if (matcherSatisfied) {
+              matchedEvidence += `Content-Type matched "${actualContentType}". `;
+            }
+          } else if (matcher.type === 'size') {
+            const bodyLen = responseBody.length;
+            const minSize = matcher['min-size'] ?? 0;
+            const maxSize = matcher['max-size'] ?? Infinity;
+            const sizeMatch = bodyLen >= minSize && bodyLen <= maxSize;
+            matcherSatisfied = isNegative ? !sizeMatch : sizeMatch;
+            if (matcherSatisfied) {
+              matchedEvidence += `Body length (${bodyLen} bytes) within expected range. `;
             }
           } else if (matcher.type === 'header') {
             const words = matcher.words || [];
@@ -309,23 +377,87 @@ export async function executeVulnerabilityScan(
           const findingId = `${tpl.id}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
           
           let remediation = 'Inspect and update server configuration according to security standards.';
+          let subFindings: SubFindingItem[] = [];
+
           if (tpl.id === 'owasp-security-headers') {
-            remediation = 'Configure defensive HTTP response headers in your web server/reverse proxy (Nginx, Cloudflare, Apache, or Express): Strict-Transport-Security, Content-Security-Policy, X-Content-Type-Options: nosniff, and X-Frame-Options: DENY.';
+            const missingList: { name: string; key: string }[] = [];
+            if (!responseHeaders['content-security-policy']) {
+              missingList.push({ name: 'Content-Security-Policy', key: 'csp' });
+              subFindings.push({
+                id: 'sub-csp',
+                name: 'Missing Content-Security-Policy (CSP)',
+                severity: 'low',
+                evidence: 'No "Content-Security-Policy" header detected in HTTP response.',
+                remediation: 'add_header Content-Security-Policy "default-src \'self\'; script-src \'self\' https:;" always;',
+              });
+            }
+            if (!responseHeaders['x-frame-options']) {
+              missingList.push({ name: 'X-Frame-Options', key: 'frame' });
+              subFindings.push({
+                id: 'sub-xfo',
+                name: 'Missing X-Frame-Options (Clickjacking Protection)',
+                severity: 'low',
+                evidence: 'No "X-Frame-Options" or CSP "frame-ancestors" directive present.',
+                remediation: 'add_header X-Frame-Options "SAMEORIGIN" always;',
+              });
+            }
+            if (!responseHeaders['x-content-type-options']) {
+              missingList.push({ name: 'X-Content-Type-Options: nosniff', key: 'sniff' });
+              subFindings.push({
+                id: 'sub-sniff',
+                name: 'Missing X-Content-Type-Options (MIME-Sniffing Defense)',
+                severity: 'low',
+                evidence: 'Header "X-Content-Type-Options: nosniff" is absent.',
+                remediation: 'add_header X-Content-Type-Options "nosniff" always;',
+              });
+            }
+            if (!responseHeaders['strict-transport-security']) {
+              missingList.push({ name: 'Strict-Transport-Security (HSTS)', key: 'hsts' });
+              subFindings.push({
+                id: 'sub-hsts',
+                name: 'Missing Strict-Transport-Security (HSTS)',
+                severity: 'low',
+                evidence: 'No "Strict-Transport-Security" header present to enforce TLS.',
+                remediation: 'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;',
+              });
+            }
+
+            matchedEvidence = `HTTP GET ${responseStatusCode} (${responseTimeMs}ms) — Missing defensive headers:\n` +
+              missingList.map(h => `• [MISSING] ${h.name}`).join('\n');
+
+            remediation = 'Add defensive HTTP security headers to your web server / reverse proxy (Nginx, Apache, Express, LiteSpeed, Cloudflare):\n\n' +
+              'Recommended headers:\n' +
+              '• Content-Security-Policy: default-src \'self\'; script-src \'self\' https:; object-src \'none\';\n' +
+              '• X-Frame-Options: SAMEORIGIN\n' +
+              '• X-Content-Type-Options: nosniff\n' +
+              '• Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n' +
+              '• Referrer-Policy: strict-origin-when-cross-origin\n\n' +
+              'Nginx Configuration (nginx.conf / sites-available):\n' +
+              'add_header Content-Security-Policy "default-src \'self\'; script-src \'self\' https:;" always;\n' +
+              'add_header X-Frame-Options "SAMEORIGIN" always;\n' +
+              'add_header X-Content-Type-Options "nosniff" always;\n' +
+              'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;\n' +
+              'add_header Referrer-Policy "strict-origin-when-cross-origin" always;\n' +
+              'server_tokens off;';
           } else if (tpl.id === 'exposed-env-credentials') {
-            remediation = 'Immediately block public HTTP access to .env* files in web server rules and invalidate/rotate any secrets, database credentials, or API keys exposed.';
+            remediation = 'Immediately block public HTTP access to .env* files in web server rules and invalidate/rotate any database credentials or API keys exposed.';
           } else if (tpl.id === 'exposed-git-repository') {
-            remediation = 'Deny web access to /.git/ directory and all subfiles via web server rules (e.g. nginx location ~ /\\.git { deny all; }).';
+            remediation = 'Deny web access to /.git/ directory and all subfiles via web server rules (e.g., in Nginx: location ~ /\\.git { deny all; }).';
           } else if (tpl.id === 'cors-misconfiguration') {
-            remediation = 'Avoid wildcards (*) in Access-Control-Allow-Origin when authentication is enabled. Maintain a strict whitelist of trusted partner origins.';
+            remediation = 'Avoid wildcards (*) in Access-Control-Allow-Origin when authentication is enabled. Maintain a strict whitelist of trusted origins.';
           } else if (tpl.id === 'cookie-security-flags') {
-            remediation = 'Enforce HttpOnly, Secure, and SameSite=Lax/Strict flags on all session cookies to mitigate XSS-based session hijacking and CSRF attacks.';
+            remediation = 'Enforce HttpOnly, Secure, and SameSite=Lax/Strict flags on all session cookies to mitigate XSS session hijacking.';
           } else if (tpl.id === 'server-version-disclosure') {
-            remediation = 'Disable server banner and framework fingerprint tokens (e.g., in Express: app.disable("x-powered-by"); in Nginx: server_tokens off;).';
+            remediation = 'Disable verbose server banner and framework fingerprint tokens (e.g., in Express: app.disable("x-powered-by"); in Nginx: server_tokens off;).';
           } else if (tpl.id === 'sqli-error-signatures') {
-            remediation = 'Use parameterized queries / prepared statements exclusively. Disable verbose database error reporting to client responses.';
+            remediation = 'Use parameterized queries / prepared statements exclusively. Disable verbose database error reporting in client responses.';
           } else if (tpl.id === 'xss-reflection-passive') {
-            remediation = 'Apply context-aware output encoding (HTML escaping) and enforce Content-Security-Policy (CSP) with script-src nonces.';
+            remediation = 'Apply context-aware output encoding (HTML entity escaping) and enforce Content-Security-Policy (CSP).';
+          } else if (tpl.id === 'api-debug-endpoints') {
+            remediation = 'Restrict public access to Swagger UI, OpenAPI JSON documentation, and Actuator health/metric debug endpoints using authentication or network firewall rules.';
           }
+
+          const isAggregated = tpl.id === 'owasp-security-headers' || tpl.id === 'cookie-security-flags' || tpl.id === 'server-version-disclosure';
 
           const finding: VulnerabilityFinding = {
             id: findingId,
@@ -333,12 +465,16 @@ export async function executeVulnerabilityScan(
             name: tplName,
             severity: tplSeverity,
             cvssScore,
+            cvssVector,
+            cvssVersion: '3.1',
             cweId,
             owaspCategory,
             description,
             url: fullUrl,
             matchedAt: fullUrl,
             evidence: matchedEvidence.trim() || 'Triggered matching conditions defined in YAML template.',
+            findingType: isAggregated ? 'aggregated' : 'atomic',
+            subFindings: subFindings.length > 0 ? subFindings : undefined,
             request: {
               method,
               url: fullUrl,
@@ -355,12 +491,12 @@ export async function executeVulnerabilityScan(
             timestamp: new Date().toISOString(),
           };
 
-          findings.push(finding);
+          rawFindings.push(finding);
 
           const logSeverityLevel = tplSeverity === 'critical' || tplSeverity === 'high' ? 'crit' : 'warn';
           emitLog(
             logSeverityLevel,
-            `[${tplSeverity.toUpperCase()}] [${tpl.id}] Found: "${tplName}" at ${fullUrl}`,
+            `[${tplSeverity.toUpperCase()}] [${tpl.id}] Identified: "${tplName}" at ${fullUrl}`,
             tpl.id,
             tplSeverity,
             tplName,
@@ -400,12 +536,37 @@ export async function executeVulnerabilityScan(
     }
   }
 
+  // POST-PROCESSING PIPELINE: Deduplication, Aggregation & Contextual CVSS Scoring
+  const postProcessedFindings: VulnerabilityFinding[] = [];
+  const seenTemplateTarget = new Set<string>();
+
+  for (const raw of rawFindings) {
+    const key = `${raw.templateId}::${raw.matchedAt}`;
+    if (seenTemplateTarget.has(key)) continue;
+    seenTemplateTarget.add(key);
+    postProcessedFindings.push(raw);
+  }
+
+  // Contextual Risk Evaluation:
+  // If active reflected input (XSS canary) exists alongside missing CSP, dynamically elevate header severity
+  const hasXssCanary = postProcessedFindings.some(f => f.templateId === 'xss-reflection-passive');
+  if (hasXssCanary) {
+    for (const f of postProcessedFindings) {
+      if (f.templateId === 'owasp-security-headers') {
+        f.severity = 'medium';
+        f.cvssScore = 5.3;
+        f.cvssVector = 'CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N';
+        f.contextualNotes = 'Contextual Severity Elevation: Baseline Low (3.1) escalated to Medium (5.3) because active reflected parameter canary was also detected, creating an exploitable vector in the absence of Content-Security-Policy (CSP).';
+      }
+    }
+  }
+
   const endTime = new Date().toISOString();
   const durationMs = Date.now() - startTimestamp;
 
   emitLog(
     'info',
-    `Audit completed in ${(durationMs / 1000).toFixed(1)}s. Executed ${templatesExecuted} templates, sent ${requestsSent} requests. Identified ${findings.length} finding(s).`
+    `Audit completed in ${(durationMs / 1000).toFixed(1)}s. Executed ${templatesExecuted} templates, sent ${requestsSent} requests. Consolidated ${postProcessedFindings.length} root finding(s).`
   );
 
   return {
@@ -415,9 +576,10 @@ export async function executeVulnerabilityScan(
     endTime,
     durationMs,
     status: 'completed',
-    findings,
+    findings: postProcessedFindings,
     templatesExecuted,
     requestsSent,
     logs,
   };
 }
+
