@@ -15,8 +15,9 @@ interface ParsedYamlInfo {
   author?: string;
   severity?: VulnerabilitySeverity;
   description?: string;
-  reference?: string[];
-  tags?: string;
+  reference?: string[] | string;
+  tags?: string[] | string;
+  remediation?: string;
   classification?: {
     'cvss-score'?: number;
     'cvss-vector'?: string;
@@ -138,25 +139,25 @@ export async function executeVulnerabilityScan(
     templateId?: string,
     severity?: VulnerabilitySeverity,
     templateName?: string,
-    payload?: import('../src/types').ScanPayloadInfo
+    payload?: any
   ) => {
-    const entry: ScanLog = {
-      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      timestamp: new Date().toLocaleTimeString(),
+    const log: ScanLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString(),
       level,
       message,
       templateId,
-      templateName,
       severity,
+      templateName,
       payload,
     };
-    logs.push(entry);
+    logs.push(log);
     if (options.onProgressLog) {
-      options.onProgressLog(entry);
+      options.onProgressLog(log);
     }
   };
 
-  emitLog('info', `Initializing scan session on target: ${normalizedUrl}`);
+  emitLog('info', `Initializing DevSecOps Vulnerability Scan targeting: ${normalizedUrl}`);
   if (options.proxy?.enabled && options.proxy?.url) {
     emitLog('info', `[Proxy Active] Upstream security proxy engaged: ${options.proxy.url} (SSL Validation: ${options.proxy.insecureSkipVerify ? 'Disabled/Burp-Bypass' : 'Strict'})`);
   }
@@ -188,7 +189,8 @@ export async function executeVulnerabilityScan(
     const cweId = parsed?.info?.classification?.['cwe-id'] || 'CWE-693';
     const owaspCategory = parsed?.info?.classification?.['owasp-category'] || 'A05:2021-Security Misconfiguration';
     const description = parsed?.info?.description || tpl.description;
-    const references = parsed?.info?.reference || [];
+    const rawRefs = parsed?.info?.reference;
+    const references = Array.isArray(rawRefs) ? rawRefs : typeof rawRefs === 'string' ? [rawRefs] : [];
 
     emitLog('info', `[${tpl.id}] Executing audit: "${tplName}"`, tpl.id, undefined, tplName);
 
@@ -361,6 +363,48 @@ export async function executeVulnerabilityScan(
             if (isNegative) {
               matcherSatisfied = !matcherSatisfied;
             }
+          } else if (matcher.type === 'regex') {
+            const part = matcher.part || 'body';
+            const targetText =
+              part === 'header'
+                ? Object.entries(responseHeaders).map(([k, v]) => `${k}: ${v}`).join('\n')
+                : part === 'all'
+                ? `${Object.entries(responseHeaders).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\n${responseBody}`
+                : responseBody;
+
+            const patterns = matcher.regex || [];
+            let regexMatches: boolean[] = [];
+
+            for (const pat of patterns) {
+              try {
+                let flags = 'm';
+                let cleanPat = pat;
+                if (cleanPat.startsWith('(?i)')) {
+                  flags += 'i';
+                  cleanPat = cleanPat.substring(4);
+                }
+                const re = new RegExp(cleanPat, flags);
+                const isMatch = re.test(targetText);
+                regexMatches.push(isMatch);
+                if (!isNegative && isMatch) {
+                  matchedEvidence += `Matched pattern "${pat}". `;
+                } else if (isNegative && !isMatch) {
+                  matchedEvidence += `Did not match pattern "${pat}". `;
+                }
+              } catch {
+                regexMatches.push(false);
+              }
+            }
+
+            if (condition === 'and') {
+              matcherSatisfied = regexMatches.length > 0 && regexMatches.every(m => m === true);
+            } else {
+              matcherSatisfied = regexMatches.some(m => m === true);
+            }
+
+            if (isNegative) {
+              matcherSatisfied = !matcherSatisfied;
+            }
           }
 
           matcherResults.push(matcherSatisfied);
@@ -376,10 +420,36 @@ export async function executeVulnerabilityScan(
         if (overallMatched) {
           const findingId = `${tpl.id}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
           
-          let remediation = 'Inspect and update server configuration according to security standards.';
+          // Extensible Remediation Engine:
+          // 1. Prefer explicit info.remediation defined in the YAML schema
+          // 2. Fallback dynamically based on CWE / OWASP classification
+          let remediation = parsed?.info?.remediation?.trim() || '';
+          if (!remediation) {
+            if (cweId === 'CWE-693' || tpl.id === 'owasp-security-headers') {
+              remediation = 'Add defensive HTTP security headers to your web server (CSP, X-Frame-Options, X-Content-Type-Options, HSTS).';
+            } else if (cweId === 'CWE-200' || cweId === 'CWE-538' || cweId === 'CWE-530') {
+              remediation = 'Restrict public web server access to sensitive files and directories using authentication or rewrite rules.';
+            } else if (cweId === 'CWE-89') {
+              remediation = 'Use parameterized queries / prepared statements exclusively. Disable verbose database error reporting.';
+            } else if (cweId === 'CWE-79') {
+              remediation = 'Apply context-aware output encoding (HTML entity escaping) and enforce Content-Security-Policy (CSP).';
+            } else if (cweId === 'CWE-346') {
+              remediation = 'Maintain a strict whitelist of trusted origins and avoid reflecting untrusted Origin headers with credentials.';
+            } else if (cweId === 'CWE-918') {
+              remediation = 'Validate and whitelist all outbound URLs; block access to private RFC1918 and cloud metadata (169.254.169.254) addresses.';
+            } else if (cweId === 'CWE-22') {
+              remediation = 'Validate and sanitize file path parameters. Use path normalization to prevent directory traversal outside webroot.';
+            } else if (cweId === 'CWE-287' || cweId === 'CWE-306') {
+              remediation = 'Enforce robust authentication and authorization checks on all sensitive administrative endpoints.';
+            } else {
+              remediation = 'Inspect and update server configuration and application code according to OWASP / NIST security standards.';
+            }
+          }
+
           let subFindings: SubFindingItem[] = [];
 
-          if (tpl.id === 'owasp-security-headers') {
+          // Dynamic sub-findings evaluation
+          if (tpl.id === 'owasp-security-headers' || (cweId === 'CWE-693' && matchers.some(m => m.negative && m.type === 'header'))) {
             const missingList: { name: string; key: string }[] = [];
             if (!responseHeaders['content-security-policy']) {
               missingList.push({ name: 'Content-Security-Policy', key: 'csp' });
@@ -388,7 +458,7 @@ export async function executeVulnerabilityScan(
                 name: 'Missing Content-Security-Policy (CSP)',
                 severity: 'low',
                 evidence: 'No "Content-Security-Policy" header detected in HTTP response.',
-                remediation: 'add_header Content-Security-Policy "default-src \'self\'; script-src \'self\' https:;" always;',
+                remediation: "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' https:;\" always;",
               });
             }
             if (!responseHeaders['x-frame-options']) {
@@ -422,42 +492,44 @@ export async function executeVulnerabilityScan(
               });
             }
 
-            matchedEvidence = `HTTP GET ${responseStatusCode} (${responseTimeMs}ms) — Missing defensive headers:\n` +
-              missingList.map(h => `• [MISSING] ${h.name}`).join('\n');
-
-            remediation = 'Add defensive HTTP security headers to your web server / reverse proxy (Nginx, Apache, Express, LiteSpeed, Cloudflare):\n\n' +
-              'Recommended headers:\n' +
-              '• Content-Security-Policy: default-src \'self\'; script-src \'self\' https:; object-src \'none\';\n' +
-              '• X-Frame-Options: SAMEORIGIN\n' +
-              '• X-Content-Type-Options: nosniff\n' +
-              '• Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n' +
-              '• Referrer-Policy: strict-origin-when-cross-origin\n\n' +
-              'Nginx Configuration (nginx.conf / sites-available):\n' +
-              'add_header Content-Security-Policy "default-src \'self\'; script-src \'self\' https:;" always;\n' +
-              'add_header X-Frame-Options "SAMEORIGIN" always;\n' +
-              'add_header X-Content-Type-Options "nosniff" always;\n' +
-              'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;\n' +
-              'add_header Referrer-Policy "strict-origin-when-cross-origin" always;\n' +
-              'server_tokens off;';
-          } else if (tpl.id === 'exposed-env-credentials') {
-            remediation = 'Immediately block public HTTP access to .env* files in web server rules and invalidate/rotate any database credentials or API keys exposed.';
-          } else if (tpl.id === 'exposed-git-repository') {
-            remediation = 'Deny web access to /.git/ directory and all subfiles via web server rules (e.g., in Nginx: location ~ /\\.git { deny all; }).';
-          } else if (tpl.id === 'cors-misconfiguration') {
-            remediation = 'Avoid wildcards (*) in Access-Control-Allow-Origin when authentication is enabled. Maintain a strict whitelist of trusted origins.';
-          } else if (tpl.id === 'cookie-security-flags') {
-            remediation = 'Enforce HttpOnly, Secure, and SameSite=Lax/Strict flags on all session cookies to mitigate XSS session hijacking.';
-          } else if (tpl.id === 'server-version-disclosure') {
-            remediation = 'Disable verbose server banner and framework fingerprint tokens (e.g., in Express: app.disable("x-powered-by"); in Nginx: server_tokens off;).';
-          } else if (tpl.id === 'sqli-error-signatures') {
-            remediation = 'Use parameterized queries / prepared statements exclusively. Disable verbose database error reporting in client responses.';
-          } else if (tpl.id === 'xss-reflection-passive') {
-            remediation = 'Apply context-aware output encoding (HTML entity escaping) and enforce Content-Security-Policy (CSP).';
-          } else if (tpl.id === 'api-debug-endpoints') {
-            remediation = 'Restrict public access to Swagger UI, OpenAPI JSON documentation, and Actuator health/metric debug endpoints using authentication or network firewall rules.';
+            if (missingList.length > 0) {
+              matchedEvidence = `HTTP GET ${responseStatusCode} (${responseTimeMs}ms) — Missing defensive headers:\n` +
+                missingList.map(h => `• [MISSING] ${h.name}`).join('\n');
+            }
+          } else if (tpl.id === 'cookie-security-flags' || cweId === 'CWE-614') {
+            const setCookie = responseHeaders['set-cookie'] || '';
+            if (setCookie) {
+              if (!setCookie.toLowerCase().includes('httponly')) {
+                subFindings.push({
+                  id: 'sub-httponly',
+                  name: 'Missing HttpOnly Flag on Cookie',
+                  severity: 'low',
+                  evidence: 'Cookie set without "HttpOnly" attribute, leaving it accessible to client-side scripts.',
+                  remediation: 'Append "HttpOnly" flag in Set-Cookie header.',
+                });
+              }
+              if (!setCookie.toLowerCase().includes('secure')) {
+                subFindings.push({
+                  id: 'sub-secure',
+                  name: 'Missing Secure Flag on Cookie',
+                  severity: 'low',
+                  evidence: 'Cookie set without "Secure" attribute, allowing transmission over cleartext HTTP.',
+                  remediation: 'Append "Secure" flag in Set-Cookie header.',
+                });
+              }
+              if (!setCookie.toLowerCase().includes('samesite')) {
+                subFindings.push({
+                  id: 'sub-samesite',
+                  name: 'Missing SameSite Flag on Cookie',
+                  severity: 'low',
+                  evidence: 'Cookie set without "SameSite" attribute (Lax/Strict), increasing CSRF risk.',
+                  remediation: 'Append "SameSite=Lax" or "SameSite=Strict" in Set-Cookie header.',
+                });
+              }
+            }
           }
 
-          const isAggregated = tpl.id === 'owasp-security-headers' || tpl.id === 'cookie-security-flags' || tpl.id === 'server-version-disclosure';
+          const isAggregated = subFindings.length > 0;
 
           const finding: VulnerabilityFinding = {
             id: findingId,
@@ -582,4 +654,3 @@ export async function executeVulnerabilityScan(
     logs,
   };
 }
-

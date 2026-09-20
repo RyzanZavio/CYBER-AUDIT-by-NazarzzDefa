@@ -1,28 +1,33 @@
 import { YamlTemplate } from '../types';
+import { syncTemplateWithYaml } from '../utils/templateParser';
 
-export const DEFAULT_TEMPLATES: YamlTemplate[] = [
+const RAW_DEFAULT_TEMPLATES: { id: string; rawYaml: string; isBuiltin: boolean }[] = [
   {
     id: 'owasp-security-headers',
-    name: 'Missing Defensive HTTP Security Headers',
-    severity: 'low',
-    description: 'Audits crucial defense-in-depth HTTP security headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options: nosniff, Strict-Transport-Security).',
-    tags: ['owasp', 'headers', 'defense-in-depth', 'burp-passive', 'hardening'],
-    enabled: true,
     isBuiltin: true,
     rawYaml: `id: owasp-security-headers
 info:
   name: Missing Defensive HTTP Security Headers
-  author: devsecops
+  author: devsecops-auditor
   severity: low
-  description: Verifies crucial defensive HTTP security headers to prevent Clickjacking, MIME-sniffing, SSL downgrade, and Cross-Site Scripting (XSS).
+  description: "Audits crucial defense-in-depth HTTP security headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options: nosniff, Strict-Transport-Security) to prevent Clickjacking, MIME-sniffing, SSL downgrade, and XSS."
   reference:
     - https://owasp.org/www-project-secure-headers/
     - https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html
-  tags: owasp,headers,defense-in-depth,hardening
+  tags: owasp,headers,defense-in-depth,burp-passive,hardening
   classification:
     cvss-score: 3.1
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N
     cwe-id: CWE-693
     owasp-category: A05:2021-Security Misconfiguration
+  remediation: |
+    Add defensive HTTP security headers to your web server or reverse proxy (Nginx, Apache, Express, Caddy, Cloudflare):
+    - Content-Security-Policy: default-src 'self'; script-src 'self' https:; object-src 'none';
+    - X-Frame-Options: SAMEORIGIN
+    - X-Content-Type-Options: nosniff
+    - Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+    - Referrer-Policy: strict-origin-when-cross-origin
+    - Permissions-Policy: camera=(), microphone=(), geolocation=()
 
 requests:
   - method: GET
@@ -58,25 +63,25 @@ requests:
   },
   {
     id: 'exposed-env-credentials',
-    name: 'Exposed Environment (.env) Credentials',
-    severity: 'critical',
-    description: 'Scans for publicly accessible .env configuration files leaking database secrets, API tokens, and production private keys.',
-    tags: ['exposure', 'credentials', 'critical', 'nuclei'],
-    enabled: true,
     isBuiltin: true,
     rawYaml: `id: exposed-env-credentials
 info:
-  name: Exposed .env Configuration File
+  name: Exposed Environment (.env) Credentials
   author: nuclei-secops
   severity: critical
-  description: Publicly exposed .env files may contain database credentials, AWS keys, JWT secrets, and private API keys.
+  description: Scans for publicly accessible .env configuration files leaking database secrets, API tokens, and production private keys.
   reference:
     - https://owasp.org/www-project-top-ten/2017/A3_2017-Sensitive_Data_Exposure
-  tags: exposure,credentials,cve,critical
+    - https://cwe.mitre.org/data/definitions/200.html
+  tags: exposure,credentials,critical,nuclei
   classification:
     cvss-score: 9.1
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
     cwe-id: CWE-200
     owasp-category: A01:2021-Broken Access Control
+  remediation: |
+    Immediately block public HTTP access to .env* files in web server configuration and invalidate/rotate any database credentials, AWS keys, or API tokens exposed.
+    In Nginx: location ~ /\\.env { deny all; return 404; }
 
 requests:
   - method: GET
@@ -84,6 +89,7 @@ requests:
       - "{{BaseURL}}/.env"
       - "{{BaseURL}}/.env.production"
       - "{{BaseURL}}/.env.local"
+      - "{{BaseURL}}/.env.backup"
     matchers-condition: and
     matchers:
       - type: status
@@ -97,30 +103,31 @@ requests:
           - "DATABASE_URL="
           - "AWS_SECRET_ACCESS_KEY"
           - "SECRET_KEY="
+          - "JWT_SECRET="
         condition: or
 `,
   },
   {
     id: 'exposed-git-repository',
-    name: 'Exposed Git Repository (.git/HEAD)',
-    severity: 'high',
-    description: 'Detects exposed .git folders containing source code, commit histories, developer branches, and embedded credentials.',
-    tags: ['git', 'exposure', 'source-code', 'nuclei'],
-    enabled: true,
     isBuiltin: true,
     rawYaml: `id: exposed-git-repository
 info:
-  name: Git Repository Directory Exposure
+  name: Exposed Git Repository (.git/HEAD)
   author: nuclei-secops
   severity: high
-  description: Exposed .git/HEAD allows attackers to reconstruct the entire application source code repository.
+  description: Detects exposed .git folders containing source code, commit histories, developer branches, and embedded credentials.
   reference:
     - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/05-Enumerate_Infrastructure_and_Application_Admin_Interfaces
-  tags: git,exposure,vulnerability
+  tags: git,exposure,source-code,nuclei
   classification:
     cvss-score: 7.5
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
     cwe-id: CWE-538
     owasp-category: A05:2021-Security Misconfiguration
+  remediation: |
+    Deny web access to /.git/ directory and all its child files via web server rules.
+    In Nginx: location ~ /\\.git { deny all; return 404; }
+    In Apache: RedirectMatch 404 /\\.git
 
 requests:
   - method: GET
@@ -137,30 +144,32 @@ requests:
         words:
           - "ref: refs/heads"
           - "[core]"
+          - "repositoryformatversion"
         condition: or
 `,
   },
   {
     id: 'cors-misconfiguration',
-    name: 'CORS Wildcard & Arbitrary Origin Audit',
-    severity: 'medium',
-    description: 'Audits Cross-Origin Resource Sharing (CORS) policy for wildcard origin reflection and credentials leakage.',
-    tags: ['cors', 'burp-active', 'owasp'],
-    enabled: true,
     isBuiltin: true,
     rawYaml: `id: cors-misconfiguration
 info:
-  name: Overly Permissive CORS Policy
+  name: CORS Wildcard & Arbitrary Origin Audit
   author: burp-scanner
   severity: medium
-  description: Insecure CORS configuration with wildcard (*) or arbitrary reflected Origin header with credentials enabled allows cross-site data theft.
+  description: Audits Cross-Origin Resource Sharing (CORS) policy for arbitrary origin reflection or insecure credentials exposure enabling cross-site data exfiltration.
   reference:
     - https://portswigger.net/web-security/cors
-  tags: cors,burp-active,data-theft
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  tags: cors,burp-active,owasp
   classification:
     cvss-score: 5.3
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
     cwe-id: CWE-346
     owasp-category: A01:2021-Broken Access Control
+  remediation: |
+    1. Avoid reflecting untrusted Origin headers into Access-Control-Allow-Origin dynamically.
+    2. Maintain an explicit whitelist of trusted frontend domains.
+    3. Never set Access-Control-Allow-Origin to '*' or 'null' when Access-Control-Allow-Credentials is true.
 
 requests:
   - method: GET
@@ -168,37 +177,45 @@ requests:
       - "{{BaseURL}}/"
     headers:
       Origin: "https://evil-attacker-domain.com"
-    matchers-condition: and
+    matchers-condition: or
     matchers:
       - type: header
         part: header
         words:
-          - "access-control-allow-origin: *"
           - "access-control-allow-origin: https://evil-attacker-domain.com"
+          - "access-control-allow-origin: null"
         condition: or
+      - type: header
+        part: header
+        words:
+          - "access-control-allow-credentials: true"
+          - "access-control-allow-origin: *"
+        condition: and
 `,
   },
   {
     id: 'server-version-disclosure',
-    name: 'Verbose Server & Tech Stack Fingerprint',
-    severity: 'info',
-    description: 'Detects detailed server banner headers (Server, X-Powered-By, X-AspNet-Version) revealing framework versions.',
-    tags: ['fingerprint', 'information-disclosure', 'burp-passive'],
-    enabled: true,
     isBuiltin: true,
     rawYaml: `id: server-version-disclosure
 info:
-  name: Detailed Server Banner Disclosure
+  name: Verbose Server & Tech Stack Fingerprint
   author: owasp-zap
   severity: info
-  description: Web servers often disclose exact operating system and software package versions, facilitating reconnaissance for attackers.
+  description: Detects detailed server banner headers (Server, X-Powered-By, X-AspNet-Version, X-Runtime) revealing exact framework or OS package versions.
   reference:
     - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server
-  tags: fingerprint,banner,disclosure
+  tags: fingerprint,information-disclosure,burp-passive
   classification:
     cvss-score: 0.0
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N
     cwe-id: CWE-200
     owasp-category: A05:2021-Security Misconfiguration
+  remediation: |
+    Disable verbose server banners and framework fingerprint headers:
+    - In Express.js: app.disable('x-powered-by');
+    - In Nginx: server_tokens off;
+    - In Apache: ServerTokens Prod; ServerSignature Off;
+    - In PHP: expose_php = Off in php.ini
 
 requests:
   - method: GET
@@ -209,33 +226,39 @@ requests:
       - type: header
         part: header
         words:
-          - "x-powered-by"
-          - "x-aspnet-version"
-          - "x-runtime"
+          - "x-powered-by:"
+          - "x-aspnet-version:"
+          - "x-runtime:"
+          - "server: apache/"
+          - "server: nginx/"
+          - "server: microsoft-iis/"
+          - "server: litespeed/"
+          - "server: gunicorn/"
+          - "server: uvicorn/"
+          - "server: openresty/"
+          - "server: cherokee/"
         condition: or
 `,
   },
   {
     id: 'robots-txt-disclosure',
-    name: 'Robots.txt Sensitive Endpoint Information Leak',
-    severity: 'info',
-    description: 'Parses robots.txt to discover hidden administration paths, private backup folders, or staging directories.',
-    tags: ['robots', 'recon', 'information-disclosure', 'owasp'],
-    enabled: true,
     isBuiltin: true,
     rawYaml: `id: robots-txt-disclosure
 info:
-  name: Sensitive Disallow Paths in Robots.txt
+  name: Robots.txt Sensitive Endpoint Information Leak
   author: nuclei-secops
   severity: info
-  description: Developers frequently place confidential paths into robots.txt to discourage search engine indexing, unintentionally publishing an attack surface.
+  description: Parses robots.txt to discover hidden administration paths, private backup folders, or staging directories disclosed in Disallow rules.
   reference:
     - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/01-Conduct_Search_Engine_Discovery_Reconnaissance_for_Information_Leakage
-  tags: robots,recon,disclosure
+  tags: robots,recon,information-disclosure,owasp
   classification:
     cvss-score: 0.0
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N
     cwe-id: CWE-200
     owasp-category: A05:2021-Security Misconfiguration
+  remediation: |
+    Do not rely on robots.txt for access control. Restrict sensitive administrative, staging, and backup paths using proper authentication, authorization gates, and IP access lists rather than publishing their locations in public robots.txt files.
 
 requests:
   - method: GET
@@ -249,33 +272,43 @@ requests:
       - type: word
         part: body
         words:
-          - "Disallow:"
-          - "User-agent:"
-        condition: and
+          - "Disallow: /admin"
+          - "Disallow: /administrator"
+          - "Disallow: /backup"
+          - "Disallow: /staging"
+          - "Disallow: /internal"
+          - "Disallow: /config"
+          - "Disallow: /secret"
+          - "Disallow: /wp-admin"
+          - "Disallow: /api/private"
+          - "Disallow: /db"
+          - "Disallow: /.git"
+        condition: or
 `,
   },
   {
     id: 'cookie-security-flags',
-    name: 'Insecure Session Cookie Flags (HttpOnly/Secure)',
-    severity: 'low',
-    description: 'Audits Set-Cookie headers for missing HttpOnly, Secure, and SameSite flags that protect session cookies.',
-    tags: ['cookies', 'session', 'owasp', 'burp-passive'],
-    enabled: true,
     isBuiltin: true,
     rawYaml: `id: cookie-security-flags
 info:
-  name: Insecure Session Cookie Flags
+  name: Insecure Session Cookie Flags (HttpOnly/Secure)
   author: burp-scanner
   severity: low
-  description: Cookies lacking the HttpOnly flag can be stolen via Cross-Site Scripting (XSS). Cookies missing Secure flag can be intercepted over cleartext HTTP.
+  description: Audits Set-Cookie headers for missing HttpOnly, Secure, and SameSite flags that protect session cookies against XSS and cleartext theft.
   reference:
     - https://owasp.org/www-community/controls/SecureFlag
     - https://owasp.org/www-community/HttpOnly
-  tags: cookies,session,hijacking
+  tags: cookies,session,owasp,burp-passive
   classification:
     cvss-score: 3.1
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N
     cwe-id: CWE-614
     owasp-category: A07:2021-Identification and Authentication Failures
+  remediation: |
+    Enforce security attributes on all authentication and session cookies:
+    - Set 'HttpOnly' to prevent JavaScript access via document.cookie (mitigates XSS cookie theft).
+    - Set 'Secure' to ensure cookies are transmitted exclusively over encrypted HTTPS connections.
+    - Set 'SameSite=Lax' or 'SameSite=Strict' to protect against Cross-Site Request Forgery (CSRF).
 
 requests:
   - method: GET
@@ -299,31 +332,36 @@ requests:
   },
   {
     id: 'sqli-error-signatures',
-    name: 'Database Error Trace Signature Detection (SQLi Passive)',
-    severity: 'high',
-    description: 'Checks for database error trace disclosures (MySQL, PostgreSQL, Oracle, SQLite, SQL Server) leaked in application responses.',
-    tags: ['sqli', 'injection', 'database', 'burp-active'],
-    enabled: true,
     isBuiltin: true,
     rawYaml: `id: sqli-error-signatures
 info:
-  name: Database Error Disclosure
+  name: Database Error Trace Signature Detection (SQLi Passive)
   author: nuclei-secops
   severity: high
-  description: Unhandled database exceptions leak schema details, query structure, and confirm SQL injection points.
+  description: Checks for database error trace disclosures (MySQL, PostgreSQL, Oracle, SQLite, SQL Server) leaked in application responses upon submitting benign test tokens.
   reference:
     - https://owasp.org/www-community/attacks/SQL_Injection
-  tags: sqli,injection,burp-active
+    - https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+  tags: sqli,injection,database,burp-active
   classification:
     cvss-score: 7.5
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
     cwe-id: CWE-89
     owasp-category: A03:2021-Injection
+  remediation: |
+    1. Use parameterized queries (Prepared Statements) or an ORM with query parameter binding exclusively.
+    2. Disable verbose database error reporting in production HTTP responses; log errors server-side with structured tracking IDs.
+    3. Enforce the principle of least privilege on database connection credentials.
 
 requests:
   - method: GET
     path:
       - "{{BaseURL}}/?id=1%27%20OR%201=1--"
       - "{{BaseURL}}/?query=%27"
+      - "{{BaseURL}}/?search=%27"
+      - "{{BaseURL}}/?cat=1%27"
+      - "{{BaseURL}}/?item=1%27"
+      - "{{BaseURL}}/?filter=%27"
     matchers-condition: and
     matchers:
       - type: word
@@ -335,36 +373,41 @@ requests:
           - "ORA-00933: SQL command not properly ended"
           - "SQLite/JDBCDriver"
           - "Unclosed quotation mark after the character string"
+          - "syntax error at or near"
         condition: or
 `,
   },
   {
     id: 'xss-reflection-passive',
-    name: 'Unsanitized Reflected Parameter Canary (XSS)',
-    severity: 'medium',
-    description: 'Tests if user-supplied query parameters are reflected verbatim without HTML entity escaping into the DOM response.',
-    tags: ['xss', 'injection', 'reflection', 'burp-active'],
-    enabled: true,
     isBuiltin: true,
     rawYaml: `id: xss-reflection-passive
 info:
-  name: Reflected Input Parameter Without Sanitization
+  name: Unsanitized Reflected Parameter Canary (XSS)
   author: burp-scanner
   severity: medium
-  description: Parameters reflected without proper context-aware sanitization can lead to Cross-Site Scripting (XSS) and session hijacking.
+  description: Tests if user-supplied query parameters are reflected verbatim without HTML entity escaping into the DOM response.
   reference:
     - https://owasp.org/www-community/attacks/xss/
-  tags: xss,injection,burp-active
+    - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+  tags: xss,injection,reflection,burp-active
   classification:
     cvss-score: 6.1
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
     cwe-id: CWE-79
     owasp-category: A03:2021-Injection
+  remediation: |
+    1. Apply context-aware output encoding (HTML entity escaping for DOM text content and attributes).
+    2. Enforce a robust Content-Security-Policy (CSP) that blocks inline scripts (no 'unsafe-inline') and restricts script origins.
+    3. Use modern frontend frameworks (React, Angular, Vue) which perform automatic context escaping by default.
 
 requests:
   - method: GET
     path:
       - "{{BaseURL}}/?sec_audit_probe=%3Csecprobe%3E"
       - "{{BaseURL}}/?q=%3Csecprobe%3E"
+      - "{{BaseURL}}/?search=%3Csecprobe%3E"
+      - "{{BaseURL}}/?query=%3Csecprobe%3E"
+      - "{{BaseURL}}/?keyword=%3Csecprobe%3E"
     matchers-condition: and
     matchers:
       - type: word
@@ -376,33 +419,34 @@ requests:
   },
   {
     id: 'sensitive-backup-files',
-    name: 'Exposed Database & Source Code Backup Dumps',
-    severity: 'high',
-    description: 'Probes for forgotten compressed backups (.zip, .sql, .tar.gz, .bak) left in web root directories.',
-    tags: ['backup', 'dumps', 'high', 'nuclei'],
-    enabled: true,
     isBuiltin: true,
     rawYaml: `id: sensitive-backup-files
 info:
-  name: Exposed Database Dump & Backup Archives
+  name: Exposed Database & Source Code Backup Dumps
   author: nuclei-secops
   severity: high
-  description: Public archive dumps allow attackers to extract database tables, configuration secrets, and proprietary source code.
+  description: Probes for forgotten compressed backups (.zip, .sql, .tar.gz, .bak) left in web root directories leaking source code or database records.
   reference:
     - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/04-Review_Old_Backup_and_Unreferenced_Files_for_Sensitive_Information
-  tags: backup,exposure,high
+  tags: backup,dumps,high,nuclei
   classification:
     cvss-score: 8.5
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
     cwe-id: CWE-530
     owasp-category: A05:2021-Security Misconfiguration
+  remediation: |
+    1. Immediately delete or move backup files (.sql, .tar.gz, .zip, .bak) outside the public web root directory.
+    2. Add web server block rules denying access to archive and dump extensions:
+       In Nginx: location ~* \\.(sql|tar|tar\\.gz|zip|bak|old|dump)$ { deny all; return 404; }
+    3. Automate backups to secure, authenticated cloud object storage rather than local web directories.
 
 requests:
   - method: GET
     path:
       - "{{BaseURL}}/backup.sql"
       - "{{BaseURL}}/database.sql"
-      - "{{BaseURL}}/backup.tar.gz"
       - "{{BaseURL}}/dump.sql"
+      - "{{BaseURL}}/db.sql"
     matchers-condition: and
     matchers:
       - type: status
@@ -415,7 +459,32 @@ requests:
           - "INSERT INTO"
           - "CREATE TABLE"
           - "PostgreSQL database dump"
+          - "SQLite format 3"
         condition: or
+  - method: GET
+    path:
+      - "{{BaseURL}}/backup.tar.gz"
+      - "{{BaseURL}}/backup.zip"
+      - "{{BaseURL}}/site-backup.zip"
+      - "{{BaseURL}}/database.tar.gz"
+      - "{{BaseURL}}/backup.bak"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: content-type
+        content-type:
+          - "application/gzip"
+          - "application/zip"
+          - "application/x-tar"
+          - "application/x-gzip"
+          - "application/octet-stream"
+          - "application/x-zip-compressed"
+      - type: size
+        min-size: 50
 `,
   }
 ];
+
+export const DEFAULT_TEMPLATES: YamlTemplate[] = RAW_DEFAULT_TEMPLATES.map(t => syncTemplateWithYaml(t));

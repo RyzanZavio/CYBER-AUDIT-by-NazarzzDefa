@@ -159,6 +159,34 @@ PROBES = [
         "indicators": ["swagger-ui", "openapi-doc", "Swagger UI", "swagger-ui-bundle"],
         "remediation": "Restrict API documentation to authenticated developers.",
     },
+    {
+        "id": "sensitive-backup-files",
+        "name": "Exposed Database & Source Code Backup Dumps",
+        "path": "/backup.sql",
+        "severity": "high",
+        "cvss": 8.5,
+        "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+        "cwe": "CWE-530",
+        "category": "A05:2021-Security Misconfiguration",
+        "indicators": ["-- MySQL dump", "INSERT INTO", "CREATE TABLE", "PostgreSQL database dump", "SQLite format 3"],
+        "remediation": "Delete public backup archives and configure web server to deny access to .sql, .tar.gz, .zip, and .bak files.",
+    },
+    {
+        "id": "robots-txt-disclosure",
+        "name": "Robots.txt Sensitive Endpoint Information Leak",
+        "path": "/robots.txt",
+        "severity": "info",
+        "cvss": 0.0,
+        "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N",
+        "cwe": "CWE-200",
+        "category": "A05:2021-Security Misconfiguration",
+        "indicators": [
+            "Disallow: /admin", "Disallow: /backup", "Disallow: /staging",
+            "Disallow: /internal", "Disallow: /config", "Disallow: /secret",
+            "Disallow: /wp-admin", "Disallow: /db", "Disallow: /.git"
+        ],
+        "remediation": "Do not rely on robots.txt for security. Protect private administration endpoints using proper authorization gates.",
+    },
 ]
 
 

@@ -3,6 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { DEFAULT_TEMPLATES } from './src/data/defaultTemplates';
 import { DEFAULT_EXTENSIONS } from './src/data/defaultExtensions';
+import { syncTemplateWithYaml } from './src/utils/templateParser';
 import {
   ExtensionManifest,
   ProxyConfig,
@@ -149,18 +150,28 @@ async function startServer() {
   });
 
   app.post('/api/templates', apiKeyAuthMiddleware, (req, res) => {
-    const template: YamlTemplate = req.body;
-    if (!template.id || !template.rawYaml) {
-      res.status(400).json({ error: 'Template must contain id and rawYaml' });
+    const templateInput = req.body;
+    if (!templateInput || !templateInput.rawYaml) {
+      res.status(400).json({ error: 'Template must contain rawYaml' });
       return;
     }
-    const existingIndex = currentTemplates.findIndex(t => t.id === template.id);
-    if (existingIndex >= 0) {
-      currentTemplates[existingIndex] = { ...currentTemplates[existingIndex], ...template };
-    } else {
-      currentTemplates.push({ ...template, isBuiltin: false });
+
+    try {
+      const syncedTemplate = syncTemplateWithYaml(templateInput);
+      const existingIndex = currentTemplates.findIndex(t => t.id === syncedTemplate.id);
+      if (existingIndex >= 0) {
+        currentTemplates[existingIndex] = {
+          ...currentTemplates[existingIndex],
+          ...syncedTemplate,
+          isBuiltin: currentTemplates[existingIndex].isBuiltin,
+        };
+      } else {
+        currentTemplates.push({ ...syncedTemplate, isBuiltin: false });
+      }
+      res.json({ success: true, template: syncedTemplate });
+    } catch (err: any) {
+      res.status(400).json({ error: `Invalid YAML template structure: ${err.message}` });
     }
-    res.json({ success: true, template });
   });
 
   app.delete('/api/templates/:id', apiKeyAuthMiddleware, (req, res) => {

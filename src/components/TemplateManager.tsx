@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import * as yaml from 'js-yaml';
 import { VulnerabilitySeverity, YamlTemplate } from '../types';
+import { syncTemplateWithYaml } from '../utils/templateParser';
 
 interface TemplateManagerProps {
   templates: YamlTemplate[];
@@ -66,29 +67,12 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
 
   const handleSave = async () => {
     try {
-      const parsed: any = yaml.load(editingYaml);
-      if (!parsed || !parsed.id) {
-        setYamlError('Template YAML must include an "id" field.');
-        return;
-      }
-
-      const tplSeverity = (parsed?.info?.severity || 'medium') as VulnerabilitySeverity;
-      const tplName = parsed?.info?.name || parsed.id;
-      const tplDesc = parsed?.info?.description || 'Custom security audit template';
-      const tags = (parsed?.info?.tags || 'custom')
-        .split(',')
-        .map((s: string) => s.trim());
-
-      const updated: YamlTemplate = {
-        id: parsed.id,
-        name: tplName,
-        severity: tplSeverity,
-        description: tplDesc,
-        tags,
-        enabled: true,
-        isBuiltin: selectedTemplate?.isBuiltin && !isCreatingNew,
+      const updated = syncTemplateWithYaml({
+        id: selectedTemplateId,
         rawYaml: editingYaml,
-      };
+        enabled: selectedTemplate?.enabled ?? true,
+        isBuiltin: selectedTemplate?.isBuiltin && !isCreatingNew,
+      });
 
       await onUpdateTemplate(updated);
       setSelectedTemplateId(updated.id);
@@ -107,14 +91,17 @@ info:
   name: Custom Web Vulnerability Probe
   author: secops-team
   severity: medium
-  description: Checks for custom misconfigurations or sensitive administrative endpoints.
+  description: Checks for custom misconfigurations, sensitive administrative endpoints, or internal data leaks.
   reference:
     - https://owasp.org/www-project-top-ten/
-  tags: custom,audit,devsecops
+  tags: custom,audit,devsecops,api
   classification:
     cvss-score: 5.5
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
     cwe-id: CWE-200
     owasp-category: A05:2021-Security Misconfiguration
+  remediation: |
+    Restrict public access to this administrative or debug endpoint using authentication middleware, IP allowlisting, or API Gateway authorization policies.
 
 requests:
   - method: GET
