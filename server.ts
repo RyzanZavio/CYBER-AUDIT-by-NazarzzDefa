@@ -15,6 +15,7 @@ import { executeVulnerabilityScan } from './server/scanner';
 import { sendWebhookNotification } from './server/webhook';
 import { getScheduleState, initializeScheduler, updateSchedule } from './server/scheduler';
 import { generateLinuxWslCliScript } from './server/cli-script';
+import { validateTargetUrl } from './server/ssrf-validator';
 
 const PORT = 3000;
 
@@ -67,13 +68,24 @@ async function startServer() {
   // Disable x-powered-by banner header
   app.disable('x-powered-by');
 
-  // Defensive HTTP Security Headers Middleware
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  // Defensive HTTP Security Headers Middleware (Production-Hardened vs Dev-Compatible)
   app.use((req, res, next) => {
-    // Content-Security-Policy (allows safe inline styles/scripts for Vite & frame-ancestors for AI Studio preview)
-    res.setHeader(
-      'Content-Security-Policy',
-      "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; frame-ancestors 'self' *;"
-    );
+    if (isProduction) {
+      // Strict Production Content-Security-Policy (Restricts XSS & Clickjacking)
+      res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+      );
+    } else {
+      // Development CSP (allows Vite HMR, eval & AI Studio iframe preview)
+      res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; frame-ancestors 'self' *;"
+      );
+    }
+
     // Prevent MIME-sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');
     // Strict Transport Security (HSTS)
@@ -86,6 +98,30 @@ async function startServer() {
   });
 
   app.use(express.json({ limit: '10mb' }));
+
+  // Optional API Key Authentication Middleware for state-modifying & scan endpoints
+  const apiKeyAuthMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const configuredKey = process.env.AUDIT_API_KEY;
+    if (!configuredKey) {
+      // If no key configured, proceed (default open for internal sandbox / standalone execution)
+      return next();
+    }
+
+    const authHeader = req.headers.authorization || '';
+    const customKeyHeader = req.headers['x-api-key'] as string;
+
+    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    const providedToken = bearerMatch ? bearerMatch[1] : customKeyHeader;
+
+    if (providedToken === configuredKey) {
+      return next();
+    }
+
+    res.status(401).json({
+      error: 'Unauthorized: Invalid or missing API key.',
+      hint: 'Provide "Authorization: Bearer <token>" or "X-API-Key: <token>" header.',
+    });
+  };
 
   // Helper functions for scheduler
   const getTemplates = () => currentTemplates;
@@ -102,6 +138,8 @@ async function startServer() {
       version: '2.4.0',
       templatesCount: currentTemplates.length,
       scheduler: getScheduleState().config.status,
+      ssrfProtection: true,
+      authEnabled: !!process.env.AUDIT_API_KEY,
     });
   });
 
@@ -110,7 +148,7 @@ async function startServer() {
     res.json(currentTemplates);
   });
 
-  app.post('/api/templates', (req, res) => {
+  app.post('/api/templates', apiKeyAuthMiddleware, (req, res) => {
     const template: YamlTemplate = req.body;
     if (!template.id || !template.rawYaml) {
       res.status(400).json({ error: 'Template must contain id and rawYaml' });
@@ -125,26 +163,39 @@ async function startServer() {
     res.json({ success: true, template });
   });
 
-  app.delete('/api/templates/:id', (req, res) => {
+  app.delete('/api/templates/:id', apiKeyAuthMiddleware, (req, res) => {
     const id = req.params.id;
     currentTemplates = currentTemplates.filter(t => t.id !== id);
     res.json({ success: true, message: `Template ${id} removed` });
   });
 
-  app.post('/api/templates/reset', (req, res) => {
+  app.post('/api/templates/reset', apiKeyAuthMiddleware, (req, res) => {
     currentTemplates = JSON.parse(JSON.stringify(DEFAULT_TEMPLATES));
     res.json({ success: true, templates: currentTemplates });
   });
 
-  // Scan endpoint
-  app.post('/api/scan', async (req, res) => {
+  // Scan endpoint with SSRF and Protocol Validation
+  app.post('/api/scan', apiKeyAuthMiddleware, async (req, res) => {
     try {
-      const { targetUrl, templateIds, timeoutMs, webhook } = req.body;
+      const { targetUrl, templateIds, timeoutMs, webhook, allowInternal } = req.body;
 
       if (!targetUrl || typeof targetUrl !== 'string') {
         res.status(400).json({ error: 'Valid targetUrl is required' });
         return;
       }
+
+      // SSRF & Target Validation
+      const targetValidation = validateTargetUrl(targetUrl, { allowInternal: !!allowInternal });
+      if (!targetValidation.isValid) {
+        res.status(400).json({
+          error: targetValidation.error,
+          code: 'SSRF_BLOCKED',
+          hint: 'Scanning localhost, RFC1918 subnets, or Cloud Metadata (169.254.169.254) is forbidden by default for security.',
+        });
+        return;
+      }
+
+      const validatedUrl = targetValidation.normalizedUrl || targetUrl;
 
       // Filter templates
       let templatesToRun = currentTemplates.filter(t => t.enabled);
@@ -154,7 +205,7 @@ async function startServer() {
 
       const effectiveProxy = req.body.proxy || (currentProxyConfig.enabled ? currentProxyConfig : undefined);
 
-      console.log(`[Scan] Starting scan on target: ${targetUrl} with ${templatesToRun.length} templates (Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'})`);
+      console.log(`[Scan] Starting scan on target: ${validatedUrl} with ${templatesToRun.length} templates (Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'})`);
 
       const isStreaming = req.headers.accept?.includes('text/event-stream') || req.query.stream === 'true' || req.path.endsWith('/stream');
 
@@ -164,7 +215,7 @@ async function startServer() {
         res.setHeader('Connection', 'keep-alive');
         res.flushHeaders?.();
 
-        const result = await executeVulnerabilityScan(targetUrl, templatesToRun, {
+        const result = await executeVulnerabilityScan(validatedUrl, templatesToRun, {
           timeoutMs: timeoutMs || 8000,
           userAgent: 'DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)',
           proxy: effectiveProxy,
@@ -195,7 +246,7 @@ async function startServer() {
         return;
       }
 
-      const result = await executeVulnerabilityScan(targetUrl, templatesToRun, {
+      const result = await executeVulnerabilityScan(validatedUrl, templatesToRun, {
         timeoutMs: timeoutMs || 8000,
         userAgent: 'DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)',
         proxy: effectiveProxy,
@@ -236,12 +287,34 @@ async function startServer() {
   });
 
   // Batch Multi-Target Scan endpoint (for subfinder/file drag/drop lists)
-  app.post('/api/scan/batch', async (req, res) => {
+  app.post('/api/scan/batch', apiKeyAuthMiddleware, async (req, res) => {
     try {
-      const { targets, templateIds, timeoutMs, proxy, webhook } = req.body;
+      const { targets, templateIds, timeoutMs, proxy, webhook, allowInternal } = req.body;
 
       if (!Array.isArray(targets) || targets.length === 0) {
         res.status(400).json({ error: 'Array of target hosts is required' });
+        return;
+      }
+
+      // Filter and validate targets against SSRF
+      const validatedTargets: string[] = [];
+      const skippedTargets: { target: string; reason: string }[] = [];
+
+      for (const t of targets) {
+        if (!t || typeof t !== 'string') continue;
+        const validation = validateTargetUrl(t, { allowInternal: !!allowInternal });
+        if (validation.isValid && validation.normalizedUrl) {
+          validatedTargets.push(validation.normalizedUrl);
+        } else {
+          skippedTargets.push({ target: t, reason: validation.error || 'Invalid URL' });
+        }
+      }
+
+      if (validatedTargets.length === 0) {
+        res.status(400).json({
+          error: 'No valid external targets to scan after SSRF filtering.',
+          skipped: skippedTargets,
+        });
         return;
       }
 
@@ -251,14 +324,14 @@ async function startServer() {
         templatesToRun = templatesToRun.filter(t => templateIds.includes(t.id));
       }
 
-      console.log(`[Batch Scan] Commencing batch scan on ${targets.length} targets (Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'})`);
+      console.log(`[Batch Scan] Commencing batch scan on ${validatedTargets.length} validated targets (Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'})`);
 
       const resultsByTarget: Record<string, ScanResult> = {};
       const allFindings: VulnerabilityFinding[] = [];
       let completedCount = 0;
       let failedCount = 0;
 
-      for (const target of targets) {
+      for (const target of validatedTargets) {
         try {
           const scanRes = await executeVulnerabilityScan(target, templatesToRun, {
             timeoutMs: timeoutMs || 6000,
@@ -279,6 +352,7 @@ async function startServer() {
             requestsSent: 0,
             logs: [
               {
+                id: `err-${Date.now()}`,
                 timestamp: new Date().toLocaleTimeString(),
                 level: 'crit',
                 message: `Batch target execution failed: ${err.message}`,
@@ -332,18 +406,24 @@ async function startServer() {
     res.json(currentProxyConfig);
   });
 
-  app.post('/api/proxy', (req, res) => {
+  app.post('/api/proxy', apiKeyAuthMiddleware, (req, res) => {
     const config: Partial<ProxyConfig> = req.body;
     currentProxyConfig = { ...currentProxyConfig, ...config };
     console.log(`[Proxy] Configuration updated: enabled=${currentProxyConfig.enabled}, url=${currentProxyConfig.url}`);
     res.json({ success: true, config: currentProxyConfig });
   });
 
-  app.post('/api/proxy/test', async (req, res) => {
+  app.post('/api/proxy/test', apiKeyAuthMiddleware, async (req, res) => {
     try {
       const proxyToTest: ProxyConfig = req.body.url ? req.body : currentProxyConfig;
       if (!proxyToTest.url) {
         res.status(400).json({ success: false, message: 'Proxy URL cannot be empty (e.g. http://127.0.0.1:8080)' });
+        return;
+      }
+
+      // Validate proxy URL scheme
+      if (!/^https?:\/\//i.test(proxyToTest.url) && !/^socks5?:\/\//i.test(proxyToTest.url)) {
+        res.status(400).json({ success: false, message: 'Invalid proxy protocol. Expected http://, https://, or socks5://' });
         return;
       }
 
@@ -400,7 +480,7 @@ async function startServer() {
     res.json(currentExtensions);
   });
 
-  app.post('/api/extensions/toggle', (req, res) => {
+  app.post('/api/extensions/toggle', apiKeyAuthMiddleware, (req, res) => {
     const { id, enabled } = req.body;
     const ext = currentExtensions.find(e => e.id === id);
     if (!ext) {
@@ -415,7 +495,7 @@ async function startServer() {
     res.json({ success: true, extension: ext, totalTemplates: currentTemplates.length });
   });
 
-  app.post('/api/extensions/install', (req, res) => {
+  app.post('/api/extensions/install', apiKeyAuthMiddleware, (req, res) => {
     try {
       const manifest: Partial<ExtensionManifest> = req.body;
       if (!manifest.id || !manifest.name) {
@@ -452,7 +532,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/extensions/:id', (req, res) => {
+  app.delete('/api/extensions/:id', apiKeyAuthMiddleware, (req, res) => {
     const { id } = req.params;
     currentExtensions = currentExtensions.filter(e => e.id !== id);
     syncExtensionTemplates();
@@ -464,17 +544,34 @@ async function startServer() {
     res.json(currentWebhookConfig);
   });
 
-  app.post('/api/webhook', (req, res) => {
+  app.post('/api/webhook', apiKeyAuthMiddleware, (req, res) => {
     const config: Partial<WebhookConfig> = req.body;
+    if (config.url) {
+      const validation = validateTargetUrl(config.url, { requireHttps: true });
+      if (!validation.isValid) {
+        res.status(400).json({ error: validation.error, code: 'SSRF_BLOCKED' });
+        return;
+      }
+    }
     currentWebhookConfig = { ...currentWebhookConfig, ...config };
     res.json({ success: true, config: currentWebhookConfig });
   });
 
-  app.post('/api/webhook/test', async (req, res) => {
+  app.post('/api/webhook/test', apiKeyAuthMiddleware, async (req, res) => {
     try {
       const config: WebhookConfig = req.body.url ? req.body : currentWebhookConfig;
       if (!config.url) {
         res.status(400).json({ success: false, message: 'Webhook URL cannot be blank' });
+        return;
+      }
+
+      // SSRF validation for webhook destination (enforce HTTPS & non-internal)
+      const validation = validateTargetUrl(config.url, { requireHttps: true });
+      if (!validation.isValid) {
+        res.status(400).json({
+          success: false,
+          message: `Webhook validation failed: ${validation.error}`,
+        });
         return;
       }
 
@@ -536,7 +633,7 @@ async function startServer() {
     res.json(getScheduleState());
   });
 
-  app.post('/api/schedule', (req, res) => {
+  app.post('/api/schedule', apiKeyAuthMiddleware, (req, res) => {
     try {
       const newConfig = req.body;
       const state = updateSchedule(newConfig, getTemplates, getWebhookConfig);

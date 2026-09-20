@@ -1,7 +1,7 @@
 {
-  "name": "react-example",
+  "name": "cyber-audit",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.4.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
