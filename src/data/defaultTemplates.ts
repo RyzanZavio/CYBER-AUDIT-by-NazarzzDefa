@@ -484,6 +484,206 @@ requests:
       - type: size
         min-size: 50
 `,
+  },
+  {
+    id: 'swagger-openapi-disclosure',
+    isBuiltin: true,
+    rawYaml: `id: swagger-openapi-disclosure
+info:
+  name: "Exposed Swagger UI & OpenAPI Specification"
+  author: devsecops-auditor
+  severity: medium
+  description: "Detects exposed interactive Swagger UI or unauthenticated OpenAPI schema specifications disclosing API routes, parameter schemas, and hidden admin endpoints."
+  reference:
+    - https://owasp.org/www-project-api-security/
+  tags: api,swagger,openapi,disclosure,owasp
+  classification:
+    cvss-score: 5.3
+    cwe-id: CWE-200
+    owasp-category: A01:2021-Broken Access Control
+  remediation: "Disable or protect Swagger UI and OpenAPI JSON/YAML endpoints in production environments behind authentication."
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/swagger-ui.html"
+      - "{{BaseURL}}/swagger-ui/index.html"
+      - "{{BaseURL}}/v2/api-docs"
+      - "{{BaseURL}}/v3/api-docs"
+      - "{{BaseURL}}/openapi.json"
+      - "{{BaseURL}}/swagger.json"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        part: body
+        words:
+          - "swagger-ui"
+          - "\"openapi\":"
+          - "\"swagger\":"
+          - "SwaggerUIBundle"
+        condition: or
+`,
+  },
+  {
+    id: 'graphql-introspection-enabled',
+    isBuiltin: true,
+    rawYaml: `id: graphql-introspection-enabled
+info:
+  name: "GraphQL Schema Introspection Enabled"
+  author: devsecops-auditor
+  severity: medium
+  description: "Checks if GraphQL endpoint allows unauthenticated __schema introspection query, allowing attackers to map all queries, mutations, and backend data models."
+  reference:
+    - https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html
+  tags: graphql,api,introspection,owasp
+  classification:
+    cvss-score: 5.3
+    cwe-id: CWE-200
+    owasp-category: A01:2021-Broken Access Control
+  remediation: "Disable introspection query in production GraphQL servers (e.g., Apollo Server introspection: false)."
+
+requests:
+  - method: POST
+    path:
+      - "{{BaseURL}}/graphql"
+      - "{{BaseURL}}/api/graphql"
+      - "{{BaseURL}}/query"
+    headers:
+      Content-Type: "application/json"
+    body: "{\\"query\\": \\"{ __schema { types { name } } }\\"}"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        part: body
+        words:
+          - "\"__schema\""
+          - "\"types\""
+        condition: and
+`,
+  },
+  {
+    id: 'spring-boot-actuator-leak',
+    isBuiltin: true,
+    rawYaml: `id: spring-boot-actuator-leak
+info:
+  name: "Spring Boot Actuator Endpoints Unauthenticated Exposure"
+  author: devsecops-auditor
+  severity: high
+  description: "Detects exposed Spring Boot Actuator endpoints (/actuator, /actuator/env, /actuator/heapdump, /actuator/beans) leaking environment credentials and memory structures."
+  reference:
+    - https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html
+  tags: spring,actuator,java,high,owasp
+  classification:
+    cvss-score: 7.5
+    cwe-id: CWE-200
+    owasp-category: A05:2021-Security Misconfiguration
+  remediation: "Configure management.endpoints.web.exposure.include=health,info and require Spring Security authentication for sensitive endpoints."
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator"
+      - "{{BaseURL}}/actuator/env"
+      - "{{BaseURL}}/actuator/mappings"
+      - "{{BaseURL}}/actuator/beans"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        part: body
+        words:
+          - "_links"
+          - "propertySources"
+          - "contexts"
+          - "actuator"
+        condition: or
+`,
+  },
+  {
+    id: 'phpmyadmin-panel-exposure',
+    isBuiltin: true,
+    rawYaml: `id: phpmyadmin-panel-exposure
+info:
+  name: "Public phpMyAdmin Database Administration Panel"
+  author: devsecops-auditor
+  severity: medium
+  description: "Detects publicly accessible phpMyAdmin database management portal, exposing the database server to brute-force attacks."
+  reference:
+    - https://www.phpmyadmin.net/
+  tags: phpmyadmin,db,mysql,exposure,owasp
+  classification:
+    cvss-score: 5.3
+    cwe-id: CWE-200
+    owasp-category: A01:2021-Broken Access Control
+  remediation: "Restrict phpMyAdmin access to internal VPN or whitelist trusted administrative IP addresses in web server config."
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/phpmyadmin/"
+      - "{{BaseURL}}/pma/"
+      - "{{BaseURL}}/phpMyAdmin/"
+      - "{{BaseURL}}/mysql/"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        part: body
+        words:
+          - "phpMyAdmin"
+          - "pma_username"
+          - "phpmyadmin.net"
+        condition: or
+`,
+  },
+  {
+    id: 'laravel-debug-mode-leak',
+    isBuiltin: true,
+    rawYaml: `id: laravel-debug-mode-leak
+info:
+  name: "Laravel APP_DEBUG Mode Enabled"
+  author: devsecops-auditor
+  severity: high
+  description: "Detects Laravel application with APP_DEBUG=true showing Ignition or Whoops error pages leaking database passwords, APP_KEY, and full stack traces."
+  reference:
+    - https://laravel.com/docs/configuration#environment-configuration
+  tags: laravel,php,debug,secrets,owasp
+  classification:
+    cvss-score: 7.5
+    cwe-id: CWE-200
+    owasp-category: A05:2021-Security Misconfiguration
+  remediation: "Set APP_DEBUG=false in production .env configuration."
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/_ignition/health-check"
+      - "{{BaseURL}}/?probe_trigger_error_404_test=1"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 500
+      - type: word
+        part: body
+        words:
+          - "Ignition"
+          - "laravel_session"
+          - "Environment & details"
+          - "APP_KEY"
+        condition: or
+`,
   }
 ];
 

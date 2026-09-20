@@ -31,19 +31,30 @@ export function getScheduleState() {
   };
 }
 
+export function setInitialScheduleConfig(config: ScheduleConfig) {
+  currentSchedule = { ...currentSchedule, ...config };
+}
+
 export function initializeScheduler(
   getTemplates: () => YamlTemplate[],
-  getWebhookConfig: () => WebhookConfig
+  getWebhookConfig: () => WebhookConfig,
+  initialConfig?: ScheduleConfig,
+  onScanCompleted?: (result: ScanResult) => void
 ) {
+  if (initialConfig) {
+    currentSchedule = { ...currentSchedule, ...initialConfig };
+  }
+
   if (currentSchedule.enabled) {
-    scheduleDailyScan(currentSchedule, getTemplates, getWebhookConfig);
+    scheduleDailyScan(currentSchedule, getTemplates, getWebhookConfig, onScanCompleted);
   }
 }
 
 export function updateSchedule(
   newConfig: Partial<ScheduleConfig>,
   getTemplates: () => YamlTemplate[],
-  getWebhookConfig: () => WebhookConfig
+  getWebhookConfig: () => WebhookConfig,
+  onScanCompleted?: (result: ScanResult) => void
 ) {
   currentSchedule = { ...currentSchedule, ...newConfig };
 
@@ -71,7 +82,7 @@ export function updateSchedule(
   }
 
   if (currentSchedule.enabled) {
-    scheduleDailyScan(currentSchedule, getTemplates, getWebhookConfig);
+    scheduleDailyScan(currentSchedule, getTemplates, getWebhookConfig, onScanCompleted);
     currentSchedule.status = 'idle';
     currentSchedule.lastStatus = `Daily automated scan scheduled at ${currentSchedule.timeString}`;
   } else {
@@ -85,7 +96,8 @@ export function updateSchedule(
 function scheduleDailyScan(
   config: ScheduleConfig,
   getTemplates: () => YamlTemplate[],
-  getWebhookConfig: () => WebhookConfig
+  getWebhookConfig: () => WebhookConfig,
+  onScanCompleted?: (result: ScanResult) => void
 ) {
   if (!cron.validate(config.cronExpression)) {
     console.warn(`[Scheduler] Invalid cron expression: ${config.cronExpression}`);
@@ -113,6 +125,10 @@ function scheduleDailyScan(
       lastScheduledScanResult = result;
       config.status = 'idle';
       config.lastStatus = `Completed with ${result.findings.length} findings (${new Date().toLocaleTimeString()})`;
+
+      if (onScanCompleted) {
+        onScanCompleted(result);
+      }
 
       // Dispatch Webhook if enabled
       if (config.notifyWebhook) {
