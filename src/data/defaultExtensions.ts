@@ -1,4 +1,5 @@
 import { ExtensionManifest } from '../types';
+import { syncTemplateWithYaml } from '../utils/templateParser';
 
 export const DEFAULT_EXTENSIONS: ExtensionManifest[] = [
   {
@@ -13,24 +14,28 @@ export const DEFAULT_EXTENSIONS: ExtensionManifest[] = [
     templatesCount: 2,
     repositoryUrl: 'https://github.com/OWASP/API-Security',
     templates: [
-      {
+      syncTemplateWithYaml({
         id: 'graphql-introspection-enabled',
-        name: 'GraphQL Introspection Query Enabled',
-        severity: 'medium',
-        description: 'Detects whether production GraphQL endpoints expose the entire internal schema via __schema introspection.',
-        tags: ['owasp-api', 'graphql', 'recon'],
-        enabled: true,
         isBuiltin: false,
         rawYaml: `id: graphql-introspection-enabled
 info:
   name: GraphQL Introspection Query Enabled
-  author: DevSecOps-Auditor
+  author: devsecops-auditor
   severity: medium
-  description: Verifies if GraphQL endpoints leak full backend data structure via public schema introspection queries.
+  description: Verifies if production GraphQL endpoints leak full backend data structure and types via public schema introspection queries.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL
+  tags: owasp-api,graphql,recon,information-disclosure
   classification:
     cvss-score: 5.3
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
     cwe-id: CWE-200
     owasp-category: A05:2021-Security Misconfiguration
+  remediation: |
+    Disable GraphQL Schema Introspection in production environments.
+    In Apollo Server: introspection: process.env.NODE_ENV !== 'production'
+    In GraphQL Yoga: useDisableIntrospection() plugin
+
 requests:
   - method: POST
     path:
@@ -50,25 +55,27 @@ requests:
           - "__schema"
           - "types"
 `,
-      },
-      {
+      }),
+      syncTemplateWithYaml({
         id: 'api-debug-endpoints',
-        name: 'Exposed Interactive API Documentation / Actuator Probe',
-        severity: 'low',
-        description: 'Checks if interactive OpenAPI/Swagger UI or Spring Boot Actuator endpoints are exposed without authentication.',
-        tags: ['owasp-api', 'swagger', 'exposure', 'defense'],
-        enabled: true,
         isBuiltin: false,
         rawYaml: `id: api-debug-endpoints
 info:
-  name: Exposed Interactive API Documentation & Actuator Endpoints
-  author: DevSecOps-Auditor
+  name: Exposed Interactive API Documentation / Actuator Probe
+  author: devsecops-auditor
   severity: low
-  description: Detects unauthenticated Swagger UI, OpenAPI JSON definitions, or Spring Boot Actuator endpoints.
+  description: Checks if interactive OpenAPI/Swagger UI or Spring Boot Actuator health/metric endpoints are exposed without authentication.
+  reference:
+    - https://owasp.org/www-project-api-security/
+  tags: owasp-api,swagger,exposure,defense
   classification:
     cvss-score: 3.1
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
     cwe-id: CWE-200
     owasp-category: A05:2021-Security Misconfiguration
+  remediation: |
+    Restrict public access to Swagger UI, OpenAPI JSON documentation, and Actuator health/metric endpoints using authentication middleware or internal network firewall rules.
+
 requests:
   - method: GET
     path:
@@ -93,7 +100,7 @@ requests:
           - '"_links":{"self":'
         condition: or
 `,
-      },
+      }),
     ],
   },
   {
@@ -108,24 +115,29 @@ requests:
     templatesCount: 2,
     repositoryUrl: 'https://portswigger.net/burp/vulnerability-scanner',
     templates: [
-      {
+      syncTemplateWithYaml({
         id: 'ssrf-cloud-metadata-probe',
-        name: 'Cloud Instance Metadata Service (IMDS) Exposure',
-        severity: 'critical',
-        description: 'Tests if reverse proxy or endpoint forwards internal queries to cloud metadata (AWS/GCP/Azure 169.254.169.254).',
-        tags: ['burp-active', 'ssrf', 'cloud'],
-        enabled: true,
         isBuiltin: false,
         rawYaml: `id: ssrf-cloud-metadata-probe
 info:
   name: Cloud Instance Metadata Service (IMDS) Exposure
-  author: DevSecOps-Auditor
+  author: devsecops-auditor
   severity: critical
-  description: Detects Server-Side Request Forgery vectors reaching cloud metadata addresses.
+  description: Tests if proxy parameters or URL handlers forward queries to internal cloud metadata addresses (AWS/GCP/Azure 169.254.169.254).
+  reference:
+    - https://owasp.org/www-community/attacks/Server_Side_Request_Forgery
+    - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html
+  tags: burp-active,ssrf,cloud,critical
   classification:
     cvss-score: 9.8
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N
     cwe-id: CWE-918
     owasp-category: A10:2021-Server-Side Request Forgery (SSRF)
+  remediation: |
+    1. Enforce strict outbound URL validation against private, loopback, and link-local IP blocks (RFC 1918, RFC 3927).
+    2. Enforce IMDSv2 (Session token requirement) with hop limit = 1 on AWS EC2 instances.
+    3. Disable unnecessary proxy forwarding endpoints or require strong API key authentication.
+
 requests:
   - method: GET
     path:
@@ -140,42 +152,51 @@ requests:
           - "instance-id"
           - "security-credentials"
 `,
-      },
-      {
+      }),
+      syncTemplateWithYaml({
         id: 'directory-traversal-canary',
-        name: 'Directory Traversal & Path Manipulation Canary',
-        severity: 'high',
-        description: 'Probes for Local File Inclusion (LFI) and path traversal using safe POSIX /etc/passwd patterns.',
-        tags: ['burp-active', 'lfi', 'traversal'],
-        enabled: true,
         isBuiltin: false,
         rawYaml: `id: directory-traversal-canary
 info:
   name: Directory Traversal & Path Manipulation Canary
-  author: DevSecOps-Auditor
+  author: devsecops-auditor
   severity: high
-  description: Checks if URL parameters allow escaping webroot into server system files.
+  description: Probes for Local File Inclusion (LFI) and path traversal using safe POSIX /etc/passwd patterns in URL parameters.
+  reference:
+    - https://owasp.org/www-community/attacks/Path_Traversal
+  tags: burp-active,lfi,traversal,high
   classification:
     cvss-score: 7.5
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
     cwe-id: CWE-22
     owasp-category: A01:2021-Broken Access Control
+  remediation: |
+    1. Use path normalization with path.resolve() and verify the resolved path starts with the allowed base directory.
+    2. Avoid passing raw user input directly to filesystem APIs (fs.readFile, open).
+    3. Use an indirect map (IDs or keys) instead of actual file path parameters.
+
 requests:
   - method: GET
     path:
       - "{{BaseURL}}/?file=../../../../etc/passwd"
       - "{{BaseURL}}/?page=../../../../etc/passwd"
       - "{{BaseURL}}/?path=../../../../etc/passwd"
+      - "{{BaseURL}}/?doc=../../../../etc/passwd"
     matchers-condition: and
     matchers:
       - type: status
         status:
           - 200
-      - type: regex
+      - type: word
         part: body
-        regex:
-          - "root:.*:0:0:"
+        words:
+          - "root:x:0:0:"
+          - "daemon:"
+          - "bin/bash"
+          - "bin/sh"
+        condition: or
 `,
-      },
+      }),
     ],
   },
   {
@@ -190,24 +211,27 @@ requests:
     templatesCount: 1,
     repositoryUrl: 'https://github.com/EdOverflow/can-i-take-over-xyz',
     templates: [
-      {
+      syncTemplateWithYaml({
         id: 'subdomain-takeover-signatures',
-        name: 'Dangling CNAME Cloud Service Fingerprint',
-        severity: 'high',
-        description: 'Identifies provider signatures indicating an orphan cloud bucket or app that can be registered by an attacker.',
-        tags: ['takeover', 'dns', 'subfinder'],
-        enabled: true,
         isBuiltin: false,
         rawYaml: `id: subdomain-takeover-signatures
 info:
   name: Dangling CNAME Cloud Service Fingerprint
-  author: DevSecOps-Auditor
+  author: devsecops-auditor
   severity: high
   description: Checks for known provider error fingerprints indicating the target CNAME points to an unclaimed cloud resource.
+  reference:
+    - https://github.com/EdOverflow/can-i-take-over-xyz
+  tags: takeover,dns,subfinder,recon
   classification:
     cvss-score: 8.2
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
     cwe-id: CWE-284
     owasp-category: A05:2021-Security Misconfiguration
+  remediation: |
+    1. Delete dangling CNAME records from DNS zone files immediately when decommissioning cloud services.
+    2. Claim or reclaim the associated cloud resource name (AWS S3 bucket, GitHub Pages repo, Heroku app) before modifying DNS.
+
 requests:
   - method: GET
     path:
@@ -225,7 +249,7 @@ requests:
           - "project not found"
           - "Fastly error: unknown domain"
 `,
-      },
+      }),
     ],
   },
   {
@@ -240,24 +264,27 @@ requests:
     templatesCount: 1,
     repositoryUrl: 'https://jwt.io',
     templates: [
-      {
+      syncTemplateWithYaml({
         id: 'jwt-none-algorithm-probe',
-        name: 'JWT Algorithm "none" Vulnerability Check',
-        severity: 'critical',
-        description: 'Tests if API endpoints accept unsigned JSON Web Tokens with alg=none in header.',
-        tags: ['jwt', 'auth', 'tokens'],
-        enabled: true,
         isBuiltin: false,
         rawYaml: `id: jwt-none-algorithm-probe
 info:
-  name: JWT Algorithm "none" Vulnerability Check
-  author: DevSecOps-Auditor
+  name: 'JWT Algorithm "none" Vulnerability Check'
+  author: devsecops-auditor
   severity: critical
-  description: Detects authentication bypass when alg=none is passed in JWT header.
+  description: Detects authentication bypass when alg=none is passed in JWT header without signature validation.
+  reference:
+    - https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/
+  tags: jwt,auth,tokens,critical
   classification:
     cvss-score: 9.8
+    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
     cwe-id: CWE-287
     owasp-category: A07:2021-Identification and Authentication Failures
+  remediation: |
+    1. Explicitly reject JWT tokens with alg="none" in token verification configuration.
+    2. Enforce strict asymmetric (RS256/ES256) or symmetric (HS256) algorithm whitelisting in JWT parser.
+
 requests:
   - method: GET
     path:
@@ -276,7 +303,7 @@ requests:
         words:
           - "admin"
 `,
-      },
+      }),
     ],
   },
 ];
