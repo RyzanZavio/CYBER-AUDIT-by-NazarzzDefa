@@ -33,6 +33,8 @@ import {
   Code,
   ArrowRight,
   Sparkles,
+  Cpu,
+  Radio,
 } from 'lucide-react';
 import { generatePdfReport } from '../utils/pdfGenerator';
 
@@ -42,7 +44,8 @@ interface WorkbenchViewProps {
   isScanning: boolean;
   templates: YamlTemplate[];
   proxyConfig: ProxyConfig;
-  onStartScan: (targetUrl: string, selectedTemplateIds: string[], timeoutMs: number) => void;
+  onStartScan: (targetUrl: string, selectedTemplateIds: string[], timeoutMs: number, threads?: number) => void;
+  onCancelScan?: () => void;
   onQuickRun?: (targetUrl: string, preset: 'quick' | 'full' | 'high-only') => void;
   onClearLogs: () => void;
 }
@@ -62,6 +65,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
   templates,
   proxyConfig,
   onStartScan,
+  onCancelScan,
   onQuickRun,
   onClearLogs,
 }) => {
@@ -92,9 +96,16 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
     }
   }, [findingsList, selectedFindingId]);
 
-  // Keyboard navigation: j/k, Tab, Ctrl+Enter
+  // Keyboard navigation: j/k, Tab, Ctrl+Enter, Esc to Cancel
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape to cancel active scan
+      if (e.key === 'Escape' && isScanning && onCancelScan) {
+        e.preventDefault();
+        onCancelScan();
+        return;
+      }
+
       // Ctrl+Enter or Cmd+Enter to run scan
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
@@ -129,7 +140,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [findingsList, selectedFindingId, targetInput, isScanning]);
+  }, [findingsList, selectedFindingId, targetInput, isScanning, onCancelScan]);
 
   // Scroll logs to bottom
   useEffect(() => {
@@ -153,7 +164,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
     }
 
     const enabledTemplateIds = templates.filter(t => t.enabled).map(t => t.id);
-    onStartScan(url, enabledTemplateIds, timeoutMs);
+    onStartScan(url, enabledTemplateIds, timeoutMs, concurrency);
   };
 
   const navigateFinding = (direction: number) => {
@@ -319,32 +330,56 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
             <span className="text-[#a1a1aa]">{proxyConfig.enabled ? 'BURP:8080' : 'DIRECT'}</span>
           </div>
 
-          {/* Scan Action Button with Ctrl+Enter badge */}
-          <button
-            type="button"
-            onClick={handleTriggerScan}
-            disabled={isScanning}
-            className={`px-4 py-1.5 font-bold flex items-center gap-2 text-xs border transition ${
-              isScanning
-                ? 'bg-red-950/80 text-red-300 border-red-800 animate-pulse cursor-wait'
-                : 'bg-cyan-600 hover:bg-cyan-500 text-white border-cyan-500 active:translate-y-px shadow-sm'
-            }`}
-          >
-            {isScanning ? (
-              <>
-                <Square className="w-3.5 h-3.5 fill-current animate-spin" />
-                <span>SCANNING...</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>EXECUTE AUDIT</span>
-                <span className="text-[10px] opacity-70 border border-cyan-400/40 px-1 py-0.2 ml-0.5">
-                  Ctrl+↵
-                </span>
-              </>
-            )}
-          </button>
+          {/* Concurrency Threads Selector */}
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-[#12141a] border border-[#27272a] text-xs">
+            <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-[#a1a1aa] text-[10px]">THREADS:</span>
+            <select
+              value={concurrency}
+              onChange={e => setConcurrency(Number(e.target.value))}
+              disabled={isScanning}
+              className="bg-[#050507] border border-[#27272a] text-cyan-300 font-bold text-xs px-1 py-0.5 outline-none cursor-pointer"
+            >
+              <option value={1}>1 (Stealth)</option>
+              <option value={3}>3 (Gentle)</option>
+              <option value={5}>5 (Normal)</option>
+              <option value={10}>10 (Fast)</option>
+              <option value={15}>15 (Aggressive)</option>
+              <option value={20}>20 (Turbo Attack)</option>
+            </select>
+          </div>
+
+          {/* Scan Action / Cancel Button */}
+          {isScanning ? (
+            <div className="flex items-center gap-1.5">
+              <div className="px-2.5 py-1.5 text-xs font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800 flex items-center gap-1.5">
+                <Radio className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                <span>{concurrency} THREADS ACTIVE</span>
+              </div>
+              <button
+                id="workbench-cancel-btn"
+                type="button"
+                onClick={onCancelScan}
+                className="px-3.5 py-1.5 font-bold flex items-center gap-1.5 text-xs bg-red-600 hover:bg-red-500 text-white border border-red-500 shadow-md shadow-red-950 transition active:scale-95 animate-pulse cursor-pointer"
+                title="Immediately abort worker threads and cancel audit (ESC)"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span>CANCEL (ESC)</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleTriggerScan}
+              className="px-4 py-1.5 font-bold flex items-center gap-2 text-xs border bg-cyan-600 hover:bg-cyan-500 text-white border-cyan-500 active:translate-y-px shadow-sm transition"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>EXECUTE AUDIT</span>
+              <span className="text-[10px] opacity-70 border border-cyan-400/40 px-1 py-0.2 ml-0.5">
+                Ctrl+↵
+              </span>
+            </button>
+          )}
 
           {scan && (
             <button

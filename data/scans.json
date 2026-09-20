@@ -1,0 +1,405 @@
+[
+  {
+    "id": "scan-1789915775173-s6xf",
+    "targetUrl": "https://smkn3kotabekasi.sch.id",
+    "startTime": "2026-09-20T14:49:35.177Z",
+    "endTime": "2026-09-20T14:49:35.178Z",
+    "durationMs": 1,
+    "status": "cancelled",
+    "findings": [],
+    "templatesExecuted": 0,
+    "requestsSent": 0,
+    "logs": [
+      {
+        "id": "log-1789915775178-gn98",
+        "timestamp": "2026-09-20T14:49:35.178Z",
+        "level": "info",
+        "message": "Initializing DevSecOps Vulnerability Scan targeting: https://smkn3kotabekasi.sch.id (Concurrency: 5 threads)"
+      },
+      {
+        "id": "log-1789915775178-16qd",
+        "timestamp": "2026-09-20T14:49:35.178Z",
+        "level": "info",
+        "message": "Loaded 19 active YAML automation templates (Threads: 5, OWASP/Nuclei/Burp Suite engine)"
+      },
+      {
+        "id": "log-1789915775178-mjwq",
+        "timestamp": "2026-09-20T14:49:35.178Z",
+        "level": "warn",
+        "message": "[CANCELLED] Scan was cancelled by user after 0.0s. Executed 0 templates, sent 0 requests before termination."
+      }
+    ],
+    "threads": 5
+  },
+  {
+    "id": "scan-1789915802504-tknd3",
+    "targetUrl": "https://smkn3kotabekasi.sch.id",
+    "startTime": "2026-09-20T14:50:02.396Z",
+    "endTime": "2026-09-20T14:50:02.396Z",
+    "durationMs": 0,
+    "status": "cancelled",
+    "findings": [],
+    "templatesExecuted": 0,
+    "requestsSent": 0,
+    "logs": [
+      {
+        "id": "log-1789915802396-6z1q",
+        "timestamp": "2026-09-20T14:50:02.396Z",
+        "level": "info",
+        "message": "Initializing DevSecOps Vulnerability Scan targeting: https://smkn3kotabekasi.sch.id (Concurrency: 10 threads)"
+      },
+      {
+        "id": "log-1789915802396-5edg",
+        "timestamp": "2026-09-20T14:50:02.396Z",
+        "level": "info",
+        "message": "Loaded 19 active YAML automation templates (Threads: 10, OWASP/Nuclei/Burp Suite engine)"
+      },
+      {
+        "id": "log-1789915802396-v20n",
+        "timestamp": "2026-09-20T14:50:02.396Z",
+        "level": "warn",
+        "message": "[CANCELLED] Scan was cancelled by user after 0.0s. Executed 0 templates, sent 0 requests before termination."
+      }
+    ],
+    "threads": 10
+  },
+  {
+    "id": "scan-1789915812463-xkch7",
+    "targetUrl": "https://smkn3kotabekasi.sch.id",
+    "startTime": "2026-09-20T14:50:11.893Z",
+    "endTime": "2026-09-20T14:50:11.893Z",
+    "durationMs": 0,
+    "status": "cancelled",
+    "findings": [],
+    "templatesExecuted": 0,
+    "requestsSent": 0,
+    "logs": [
+      {
+        "id": "log-1789915811893-uxac",
+        "timestamp": "2026-09-20T14:50:11.893Z",
+        "level": "info",
+        "message": "Initializing DevSecOps Vulnerability Scan targeting: https://smkn3kotabekasi.sch.id (Concurrency: 15 threads)"
+      },
+      {
+        "id": "log-1789915811893-nqsm",
+        "timestamp": "2026-09-20T14:50:11.893Z",
+        "level": "info",
+        "message": "Loaded 19 active YAML automation templates (Threads: 15, OWASP/Nuclei/Burp Suite engine)"
+      },
+      {
+        "id": "log-1789915811893-8di7",
+        "timestamp": "2026-09-20T14:50:11.893Z",
+        "level": "warn",
+        "message": "[CANCELLED] Scan was cancelled by user after 0.0s. Executed 0 templates, sent 0 requests before termination."
+      }
+    ],
+    "threads": 15
+  },
+  {
+    "id": "scan-1789915935226-a4me",
+    "targetUrl": "https://httpbin.org",
+    "startTime": "2026-09-20T14:52:15.235Z",
+    "endTime": "2026-09-20T14:52:16.164Z",
+    "durationMs": 929,
+    "status": "completed",
+    "findings": [
+      {
+        "id": "owasp-security-headers-1789915936163-u2vg",
+        "templateId": "owasp-security-headers",
+        "name": "Missing Defensive HTTP Security Headers",
+        "severity": "low",
+        "cvssScore": 3.1,
+        "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N",
+        "cvssVersion": "3.1",
+        "cweId": "CWE-693",
+        "owaspCategory": "A05:2021-Security Misconfiguration",
+        "description": "Audits crucial defense-in-depth HTTP security headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options: nosniff, Strict-Transport-Security) to prevent Clickjacking, MIME-sniffing, SSL downgrade, and XSS.",
+        "url": "https://httpbin.org/",
+        "matchedAt": "https://httpbin.org/",
+        "evidence": "HTTP GET 200 (923ms) — Missing defensive headers:\n• [MISSING] Content-Security-Policy\n• [MISSING] X-Frame-Options\n• [MISSING] X-Content-Type-Options: nosniff\n• [MISSING] Strict-Transport-Security (HSTS)",
+        "findingType": "aggregated",
+        "subFindings": [
+          {
+            "id": "sub-csp",
+            "name": "Missing Content-Security-Policy (CSP)",
+            "severity": "low",
+            "evidence": "No \"Content-Security-Policy\" header detected in HTTP response.",
+            "remediation": "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' https:;\" always;"
+          },
+          {
+            "id": "sub-xfo",
+            "name": "Missing X-Frame-Options (Clickjacking Protection)",
+            "severity": "low",
+            "evidence": "No \"X-Frame-Options\" or CSP \"frame-ancestors\" directive present.",
+            "remediation": "add_header X-Frame-Options \"SAMEORIGIN\" always;"
+          },
+          {
+            "id": "sub-sniff",
+            "name": "Missing X-Content-Type-Options (MIME-Sniffing Defense)",
+            "severity": "low",
+            "evidence": "Header \"X-Content-Type-Options: nosniff\" is absent.",
+            "remediation": "add_header X-Content-Type-Options \"nosniff\" always;"
+          },
+          {
+            "id": "sub-hsts",
+            "name": "Missing Strict-Transport-Security (HSTS)",
+            "severity": "low",
+            "evidence": "No \"Strict-Transport-Security\" header present to enforce TLS.",
+            "remediation": "add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\" always;"
+          }
+        ],
+        "request": {
+          "method": "GET",
+          "url": "https://httpbin.org/",
+          "headers": {
+            "User-Agent": "DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)",
+            "Accept": "*/*"
+          }
+        },
+        "response": {
+          "statusCode": 200,
+          "headers": {
+            "access-control-allow-credentials": "true",
+            "access-control-allow-origin": "*",
+            "connection": "keep-alive",
+            "content-length": "9593",
+            "content-type": "text/html; charset=utf-8",
+            "date": "Sun, 20 Sep 2026 14:52:16 GMT",
+            "server": "gunicorn/19.9.0"
+          },
+          "bodySnippet": "<!DOCTYPE html>\n<html lang=\"en\">\n\n<head>\n    <meta charset=\"UTF-8\">\n    <title>httpbin.org</title>\n    <link href=\"https://fonts.googleapis.com/css?family=Open+Sans:400,700|Source+Code+Pro:300,600|Titillium+Web:400,600,700\"\n        rel=\"stylesheet\">\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/flasgger_static/swagger-ui.css\">\n    <link rel=\"icon\" type=\"image/png\" href=\"/static/favicon.ico\" sizes=\"64x64 32x32 16x16\" />\n    <style>\n        html {\n            box-sizing: border-box;\n          ",
+          "responseTimeMs": 923
+        },
+        "remediation": "Add defensive HTTP security headers to your web server or reverse proxy (Nginx, Apache, Express, Caddy, Cloudflare):\n- Content-Security-Policy: default-src 'self'; script-src 'self' https:; object-src 'none';\n- X-Frame-Options: SAMEORIGIN\n- X-Content-Type-Options: nosniff\n- Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n- Referrer-Policy: strict-origin-when-cross-origin\n- Permissions-Policy: camera=(), microphone=(), geolocation=()",
+        "references": [
+          "https://owasp.org/www-project-secure-headers/",
+          "https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html"
+        ],
+        "timestamp": "2026-09-20T14:52:16.163Z"
+      }
+    ],
+    "templatesExecuted": 1,
+    "requestsSent": 1,
+    "logs": [
+      {
+        "id": "log-1789915935235-8bn4",
+        "timestamp": "2026-09-20T14:52:15.235Z",
+        "level": "info",
+        "message": "Initializing DevSecOps Vulnerability Scan targeting: https://httpbin.org (Concurrency: 5 threads)"
+      },
+      {
+        "id": "log-1789915935235-6ctp",
+        "timestamp": "2026-09-20T14:52:15.235Z",
+        "level": "info",
+        "message": "Loaded 1 active YAML automation templates (Threads: 5, OWASP/Nuclei/Burp Suite engine)"
+      },
+      {
+        "id": "log-1789915935237-bhp3",
+        "timestamp": "2026-09-20T14:52:15.237Z",
+        "level": "info",
+        "message": "[owasp-security-headers] Executing audit: \"Missing Defensive HTTP Security Headers\"",
+        "templateId": "owasp-security-headers",
+        "templateName": "Missing Defensive HTTP Security Headers"
+      },
+      {
+        "id": "log-1789915935237-1bno",
+        "timestamp": "2026-09-20T14:52:15.237Z",
+        "level": "info",
+        "message": "[PROBE] Transmitting GET https://httpbin.org/",
+        "templateId": "owasp-security-headers",
+        "templateName": "Missing Defensive HTTP Security Headers",
+        "payload": {
+          "method": "GET",
+          "url": "https://httpbin.org/",
+          "headers": {
+            "User-Agent": "DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)",
+            "Accept": "*/*"
+          }
+        }
+      },
+      {
+        "id": "log-1789915936163-sogw",
+        "timestamp": "2026-09-20T14:52:16.163Z",
+        "level": "warn",
+        "message": "[LOW] [owasp-security-headers] Identified: \"Missing Defensive HTTP Security Headers\" at https://httpbin.org/",
+        "templateId": "owasp-security-headers",
+        "severity": "low",
+        "templateName": "Missing Defensive HTTP Security Headers",
+        "payload": {
+          "method": "GET",
+          "url": "https://httpbin.org/",
+          "headers": {
+            "User-Agent": "DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)",
+            "Accept": "*/*"
+          },
+          "statusCode": 200,
+          "responseTimeMs": 923,
+          "matched": true,
+          "evidence": "HTTP GET 200 (923ms) — Missing defensive headers:\n• [MISSING] Content-Security-Policy\n• [MISSING] X-Frame-Options\n• [MISSING] X-Content-Type-Options: nosniff\n• [MISSING] Strict-Transport-Security (HSTS)",
+          "matchersCondition": "or"
+        }
+      },
+      {
+        "id": "log-1789915936164-455b",
+        "timestamp": "2026-09-20T14:52:16.164Z",
+        "level": "info",
+        "message": "Audit completed in 0.9s. Executed 1 templates with 5 concurrent threads, sent 1 requests. Consolidated 1 root finding(s)."
+      }
+    ],
+    "threads": 5
+  },
+  {
+    "id": "scan-1789915938375-8946",
+    "targetUrl": "https://smkn3kotabekasi.sch.id",
+    "startTime": "2026-09-20T14:52:18.376Z",
+    "endTime": "2026-09-20T14:52:19.103Z",
+    "durationMs": 727,
+    "status": "completed",
+    "findings": [
+      {
+        "id": "owasp-security-headers-1789915939102-ooiy",
+        "templateId": "owasp-security-headers",
+        "name": "Missing Defensive HTTP Security Headers",
+        "severity": "low",
+        "cvssScore": 3.1,
+        "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N",
+        "cvssVersion": "3.1",
+        "cweId": "CWE-693",
+        "owaspCategory": "A05:2021-Security Misconfiguration",
+        "description": "Audits crucial defense-in-depth HTTP security headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options: nosniff, Strict-Transport-Security) to prevent Clickjacking, MIME-sniffing, SSL downgrade, and XSS.",
+        "url": "https://smkn3kotabekasi.sch.id/",
+        "matchedAt": "https://smkn3kotabekasi.sch.id/",
+        "evidence": "HTTP GET 200 (680ms) — Missing defensive headers:\n• [MISSING] Content-Security-Policy\n• [MISSING] X-Frame-Options\n• [MISSING] X-Content-Type-Options: nosniff\n• [MISSING] Strict-Transport-Security (HSTS)",
+        "findingType": "aggregated",
+        "subFindings": [
+          {
+            "id": "sub-csp",
+            "name": "Missing Content-Security-Policy (CSP)",
+            "severity": "low",
+            "evidence": "No \"Content-Security-Policy\" header detected in HTTP response.",
+            "remediation": "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' https:;\" always;"
+          },
+          {
+            "id": "sub-xfo",
+            "name": "Missing X-Frame-Options (Clickjacking Protection)",
+            "severity": "low",
+            "evidence": "No \"X-Frame-Options\" or CSP \"frame-ancestors\" directive present.",
+            "remediation": "add_header X-Frame-Options \"SAMEORIGIN\" always;"
+          },
+          {
+            "id": "sub-sniff",
+            "name": "Missing X-Content-Type-Options (MIME-Sniffing Defense)",
+            "severity": "low",
+            "evidence": "Header \"X-Content-Type-Options: nosniff\" is absent.",
+            "remediation": "add_header X-Content-Type-Options \"nosniff\" always;"
+          },
+          {
+            "id": "sub-hsts",
+            "name": "Missing Strict-Transport-Security (HSTS)",
+            "severity": "low",
+            "evidence": "No \"Strict-Transport-Security\" header present to enforce TLS.",
+            "remediation": "add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\" always;"
+          }
+        ],
+        "request": {
+          "method": "GET",
+          "url": "https://smkn3kotabekasi.sch.id/",
+          "headers": {
+            "User-Agent": "DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)",
+            "Accept": "*/*"
+          }
+        },
+        "response": {
+          "statusCode": 200,
+          "headers": {
+            "connection": "Upgrade, Keep-Alive",
+            "content-type": "text/html; charset=UTF-8",
+            "date": "Sun, 20 Sep 2026 14:52:17 GMT",
+            "keep-alive": "timeout=5, max=100",
+            "link": "<https://smkn3kotabekasi.sch.id/wp-json/>; rel=\"https://api.w.org/\", <https://smkn3kotabekasi.sch.id/wp-json/wp/v2/pages/11>; rel=\"alternate\"; title=\"JSON\"; type=\"application/json\", <https://smkn3kotabekasi.sch.id/>; rel=shortlink",
+            "server": "Apache",
+            "transfer-encoding": "chunked",
+            "upgrade": "h2,h2c"
+          },
+          "bodySnippet": "<!DOCTYPE html>\r\n<html lang=\"id\">\r\n\t<head>\r\n\t\t<meta charset=\"UTF-8\" />\r\n\t\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=yes\">\r\n\t\t\r\n\t\t\r\n\t\t<meta name=\"description\" content=\"SERBA BISA\" />\r\n\t\t<link rel=\"profile\" href=\"https://gmpg.org/xfn/11\" />\r\n\t\t<meta property=\"og:locale\" content=\"id_ID\" />\r\n        <meta property=\"og:type\" content=\"website\" />\r\n        <meta property=\"og:title\" content=\"SMKN 3 KOTA BEKASI\" />\r\n        <meta property=\"og:description\" content",
+          "responseTimeMs": 680
+        },
+        "remediation": "Add defensive HTTP security headers to your web server or reverse proxy (Nginx, Apache, Express, Caddy, Cloudflare):\n- Content-Security-Policy: default-src 'self'; script-src 'self' https:; object-src 'none';\n- X-Frame-Options: SAMEORIGIN\n- X-Content-Type-Options: nosniff\n- Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n- Referrer-Policy: strict-origin-when-cross-origin\n- Permissions-Policy: camera=(), microphone=(), geolocation=()",
+        "references": [
+          "https://owasp.org/www-project-secure-headers/",
+          "https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html"
+        ],
+        "timestamp": "2026-09-20T14:52:19.102Z"
+      }
+    ],
+    "templatesExecuted": 1,
+    "requestsSent": 1,
+    "logs": [
+      {
+        "id": "log-1789915938377-sd3z",
+        "timestamp": "2026-09-20T14:52:18.377Z",
+        "level": "info",
+        "message": "Initializing DevSecOps Vulnerability Scan targeting: https://smkn3kotabekasi.sch.id (Concurrency: 5 threads)"
+      },
+      {
+        "id": "log-1789915938377-wiv3",
+        "timestamp": "2026-09-20T14:52:18.377Z",
+        "level": "info",
+        "message": "Loaded 1 active YAML automation templates (Threads: 5, OWASP/Nuclei/Burp Suite engine)"
+      },
+      {
+        "id": "log-1789915938377-a0qy",
+        "timestamp": "2026-09-20T14:52:18.377Z",
+        "level": "info",
+        "message": "[owasp-security-headers] Executing audit: \"Missing Defensive HTTP Security Headers\"",
+        "templateId": "owasp-security-headers",
+        "templateName": "Missing Defensive HTTP Security Headers"
+      },
+      {
+        "id": "log-1789915938377-jowe",
+        "timestamp": "2026-09-20T14:52:18.377Z",
+        "level": "info",
+        "message": "[PROBE] Transmitting GET https://smkn3kotabekasi.sch.id/",
+        "templateId": "owasp-security-headers",
+        "templateName": "Missing Defensive HTTP Security Headers",
+        "payload": {
+          "method": "GET",
+          "url": "https://smkn3kotabekasi.sch.id/",
+          "headers": {
+            "User-Agent": "DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)",
+            "Accept": "*/*"
+          }
+        }
+      },
+      {
+        "id": "log-1789915939102-tg48",
+        "timestamp": "2026-09-20T14:52:19.102Z",
+        "level": "warn",
+        "message": "[LOW] [owasp-security-headers] Identified: \"Missing Defensive HTTP Security Headers\" at https://smkn3kotabekasi.sch.id/",
+        "templateId": "owasp-security-headers",
+        "severity": "low",
+        "templateName": "Missing Defensive HTTP Security Headers",
+        "payload": {
+          "method": "GET",
+          "url": "https://smkn3kotabekasi.sch.id/",
+          "headers": {
+            "User-Agent": "DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)",
+            "Accept": "*/*"
+          },
+          "statusCode": 200,
+          "responseTimeMs": 680,
+          "matched": true,
+          "evidence": "HTTP GET 200 (680ms) — Missing defensive headers:\n• [MISSING] Content-Security-Policy\n• [MISSING] X-Frame-Options\n• [MISSING] X-Content-Type-Options: nosniff\n• [MISSING] Strict-Transport-Security (HSTS)",
+          "matchersCondition": "or"
+        }
+      },
+      {
+        "id": "log-1789915939103-al7s",
+        "timestamp": "2026-09-20T14:52:19.103Z",
+        "level": "info",
+        "message": "Audit completed in 0.7s. Executed 1 templates with 5 concurrent threads, sent 1 requests. Consolidated 1 root finding(s)."
+      }
+    ],
+    "threads": 5
+  }
+]

@@ -1,4 +1,7 @@
-export function generateLinuxWslCliScript(appUrl: string): string {
+export function generateLinuxWslCliScript(rawAppUrl: string): string {
+  // Defensive sanitization against Host Header Injection and shell metacharacters
+  const appUrl = (rawAppUrl || 'http://localhost:3000').replace(/[^a-zA-Z0-9.:\/-]/g, '');
+
   return `#!/usr/bin/env bash
 # ==============================================================================
 # DevSecOps Cybersecurity Vulnerability Audit CLI (Linux & WSL)
