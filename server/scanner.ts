@@ -574,22 +574,20 @@ export async function executeVulnerabilityScan(
 
           const isAggregated = subFindings.length > 0;
 
-          const finding: VulnerabilityFinding = {
+          const baseFindingData = {
             id: findingId,
             templateId: tpl.id,
             name: tplName,
             severity: tplSeverity,
             cvssScore,
             cvssVector,
-            cvssVersion: '3.1',
+            cvssVersion: '3.1' as const,
             cweId,
             owaspCategory,
             description,
             url: fullUrl,
             matchedAt: fullUrl,
             evidence: matchedEvidence.trim() || 'Triggered matching conditions defined in YAML template.',
-            findingType: isAggregated ? 'aggregated' : 'atomic',
-            subFindings: subFindings.length > 0 ? subFindings : undefined,
             request: {
               method,
               url: fullUrl,
@@ -605,6 +603,10 @@ export async function executeVulnerabilityScan(
             references,
             timestamp: new Date().toISOString(),
           };
+
+          const finding: VulnerabilityFinding = isAggregated
+            ? { ...baseFindingData, findingType: 'aggregated', subFindings }
+            : { ...baseFindingData, findingType: 'atomic' };
 
           rawFindings.push(finding);
 

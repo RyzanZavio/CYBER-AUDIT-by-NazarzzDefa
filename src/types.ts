@@ -22,7 +22,7 @@ export interface SubFindingItem {
   remediation?: string;
 }
 
-export interface VulnerabilityFinding {
+export interface BaseFinding {
   id: string;
   templateId: string;
   name: string;
@@ -36,14 +36,38 @@ export interface VulnerabilityFinding {
   url: string;
   matchedAt: string;
   evidence: string;
-  findingType?: 'atomic' | 'aggregated';
-  subFindings?: SubFindingItem[];
   contextualNotes?: string;
   request?: FindingRequest;
   response?: FindingResponse;
   remediation: string;
   references: string[];
   timestamp: string;
+}
+
+export interface AtomicFinding extends BaseFinding {
+  findingType?: 'atomic';
+  subFindings?: never;
+}
+
+export interface AggregatedFinding extends BaseFinding {
+  findingType: 'aggregated';
+  subFindings: SubFindingItem[];
+}
+
+export type VulnerabilityFinding = AtomicFinding | AggregatedFinding;
+
+/**
+ * Type Guard to check if a finding is an Aggregated Finding with non-empty sub-checks
+ */
+export function isAggregatedFinding(finding: VulnerabilityFinding): finding is AggregatedFinding {
+  return finding.findingType === 'aggregated' && Array.isArray((finding as any).subFindings) && (finding as any).subFindings.length > 0;
+}
+
+/**
+ * Type Guard to check if a finding is an Atomic Finding
+ */
+export function isAtomicFinding(finding: VulnerabilityFinding): finding is AtomicFinding {
+  return finding.findingType !== 'aggregated' || !(finding as any).subFindings;
 }
 
 export interface YamlTemplate {

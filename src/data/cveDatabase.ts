@@ -1333,3 +1333,62 @@ export const CVE_DATABASE: CveDatabaseItem[] = RAW_CVE_DATABASE.map(item => {
     yamlTemplate,
   };
 });
+
+// ── O(1) Fast Hash Index Structures ──
+export const CVE_INDEX_BY_ID = new Map<string, CveDatabaseItem>();
+export const CVE_INDEX_BY_TECH = new Map<string, CveDatabaseItem[]>();
+export const CVE_INDEX_BY_SEVERITY = new Map<string, CveDatabaseItem[]>();
+
+CVE_DATABASE.forEach(item => {
+  // Index by standard uppercase & lowercase CVE ID
+  CVE_INDEX_BY_ID.set(item.cveId.toUpperCase(), item);
+  CVE_INDEX_BY_ID.set(item.cveId.toLowerCase(), item);
+  if (item.templateId) {
+    CVE_INDEX_BY_ID.set(item.templateId.toLowerCase(), item);
+  }
+
+  // Index by technology tokens
+  const tokens = (item.affectedTech || '')
+    .toLowerCase()
+    .split(/[\s,;/()]+/)
+    .map(t => t.trim())
+    .filter(t => t.length > 2);
+
+  for (const token of tokens) {
+    const list = CVE_INDEX_BY_TECH.get(token) || [];
+    list.push(item);
+    CVE_INDEX_BY_TECH.set(token, list);
+  }
+
+  // Index by severity level
+  const sevKey = item.severity.toLowerCase();
+  const sevList = CVE_INDEX_BY_SEVERITY.get(sevKey) || [];
+  sevList.push(item);
+  CVE_INDEX_BY_SEVERITY.set(sevKey, sevList);
+});
+
+/**
+ * O(1) Direct lookup by CVE ID or Template ID
+ */
+export function getCveByIdFast(id: string): CveDatabaseItem | undefined {
+  if (!id) return undefined;
+  return CVE_INDEX_BY_ID.get(id.trim().toUpperCase()) || CVE_INDEX_BY_ID.get(id.trim().toLowerCase());
+}
+
+/**
+ * O(1) technology-matched lookup for multiple detected technology fingerprints
+ */
+export function getCvesForTechnologiesFast(technologies: string[]): CveDatabaseItem[] {
+  const result = new Set<CveDatabaseItem>();
+  for (const tech of technologies) {
+    const lower = tech.toLowerCase();
+    for (const [key, items] of CVE_INDEX_BY_TECH.entries()) {
+      if (lower.includes(key) || key.includes(lower)) {
+        for (const item of items) {
+          result.add(item);
+        }
+      }
+    }
+  }
+  return Array.from(result);
+}

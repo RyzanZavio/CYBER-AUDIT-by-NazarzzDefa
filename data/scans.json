@@ -401,5 +401,158 @@
       }
     ],
     "threads": 5
+  },
+  {
+    "id": "scan-1789961035049-oodf",
+    "targetUrl": "https://httpbin.org",
+    "startTime": "2026-09-21T03:23:55.063Z",
+    "endTime": "2026-09-21T03:23:55.989Z",
+    "durationMs": 926,
+    "status": "completed",
+    "findings": [
+      {
+        "id": "owasp-security-headers-1789961035989-epks",
+        "templateId": "owasp-security-headers",
+        "name": "Missing Defensive HTTP Security Headers",
+        "severity": "low",
+        "cvssScore": 3.1,
+        "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N",
+        "cvssVersion": "3.1",
+        "cweId": "CWE-693",
+        "owaspCategory": "A05:2021-Security Misconfiguration",
+        "description": "Audits crucial defense-in-depth HTTP security headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options: nosniff, Strict-Transport-Security) to prevent Clickjacking, MIME-sniffing, SSL downgrade, and XSS.",
+        "url": "https://httpbin.org/",
+        "matchedAt": "https://httpbin.org/",
+        "evidence": "HTTP GET 200 (920ms) — Missing defensive headers:\n• [MISSING] Content-Security-Policy\n• [MISSING] X-Frame-Options\n• [MISSING] X-Content-Type-Options: nosniff\n• [MISSING] Strict-Transport-Security (HSTS)",
+        "request": {
+          "method": "GET",
+          "url": "https://httpbin.org/",
+          "headers": {
+            "User-Agent": "DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)",
+            "Accept": "*/*"
+          }
+        },
+        "response": {
+          "statusCode": 200,
+          "headers": {
+            "access-control-allow-credentials": "true",
+            "access-control-allow-origin": "*",
+            "connection": "keep-alive",
+            "content-length": "9593",
+            "content-type": "text/html; charset=utf-8",
+            "date": "Mon, 21 Sep 2026 03:23:55 GMT",
+            "server": "gunicorn/19.9.0"
+          },
+          "bodySnippet": "<!DOCTYPE html>\n<html lang=\"en\">\n\n<head>\n    <meta charset=\"UTF-8\">\n    <title>httpbin.org</title>\n    <link href=\"https://fonts.googleapis.com/css?family=Open+Sans:400,700|Source+Code+Pro:300,600|Titillium+Web:400,600,700\"\n        rel=\"stylesheet\">\n    <link rel=\"stylesheet\" type=\"text/css\" href=\"/flasgger_static/swagger-ui.css\">\n    <link rel=\"icon\" type=\"image/png\" href=\"/static/favicon.ico\" sizes=\"64x64 32x32 16x16\" />\n    <style>\n        html {\n            box-sizing: border-box;\n          ",
+          "responseTimeMs": 920
+        },
+        "remediation": "Add defensive HTTP security headers to your web server or reverse proxy (Nginx, Apache, Express, Caddy, Cloudflare):\n- Content-Security-Policy: default-src 'self'; script-src 'self' https:; object-src 'none';\n- X-Frame-Options: SAMEORIGIN\n- X-Content-Type-Options: nosniff\n- Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n- Referrer-Policy: strict-origin-when-cross-origin\n- Permissions-Policy: camera=(), microphone=(), geolocation=()",
+        "references": [
+          "https://owasp.org/www-project-secure-headers/",
+          "https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html"
+        ],
+        "timestamp": "2026-09-21T03:23:55.989Z",
+        "findingType": "aggregated",
+        "subFindings": [
+          {
+            "id": "sub-csp",
+            "name": "Missing Content-Security-Policy (CSP)",
+            "severity": "low",
+            "evidence": "No \"Content-Security-Policy\" header detected in HTTP response.",
+            "remediation": "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' https:;\" always;"
+          },
+          {
+            "id": "sub-xfo",
+            "name": "Missing X-Frame-Options (Clickjacking Protection)",
+            "severity": "low",
+            "evidence": "No \"X-Frame-Options\" or CSP \"frame-ancestors\" directive present.",
+            "remediation": "add_header X-Frame-Options \"SAMEORIGIN\" always;"
+          },
+          {
+            "id": "sub-sniff",
+            "name": "Missing X-Content-Type-Options (MIME-Sniffing Defense)",
+            "severity": "low",
+            "evidence": "Header \"X-Content-Type-Options: nosniff\" is absent.",
+            "remediation": "add_header X-Content-Type-Options \"nosniff\" always;"
+          },
+          {
+            "id": "sub-hsts",
+            "name": "Missing Strict-Transport-Security (HSTS)",
+            "severity": "low",
+            "evidence": "No \"Strict-Transport-Security\" header present to enforce TLS.",
+            "remediation": "add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\" always;"
+          }
+        ]
+      }
+    ],
+    "templatesExecuted": 1,
+    "requestsSent": 1,
+    "logs": [
+      {
+        "id": "log-1789961035063-mfer",
+        "timestamp": "2026-09-21T03:23:55.063Z",
+        "level": "info",
+        "message": "Initializing DevSecOps Vulnerability Scan targeting: https://httpbin.org (Concurrency: 5 threads)"
+      },
+      {
+        "id": "log-1789961035063-tab5",
+        "timestamp": "2026-09-21T03:23:55.063Z",
+        "level": "info",
+        "message": "Loaded 1 active YAML automation templates (Threads: 5, OWASP/Nuclei/Burp Suite engine)"
+      },
+      {
+        "id": "log-1789961035065-nbho",
+        "timestamp": "2026-09-21T03:23:55.065Z",
+        "level": "info",
+        "message": "[owasp-security-headers] Executing audit: \"Missing Defensive HTTP Security Headers\"",
+        "templateId": "owasp-security-headers",
+        "templateName": "Missing Defensive HTTP Security Headers"
+      },
+      {
+        "id": "log-1789961035065-upnu",
+        "timestamp": "2026-09-21T03:23:55.065Z",
+        "level": "info",
+        "message": "[PROBE] Transmitting GET https://httpbin.org/",
+        "templateId": "owasp-security-headers",
+        "templateName": "Missing Defensive HTTP Security Headers",
+        "payload": {
+          "method": "GET",
+          "url": "https://httpbin.org/",
+          "headers": {
+            "User-Agent": "DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)",
+            "Accept": "*/*"
+          }
+        }
+      },
+      {
+        "id": "log-1789961035989-l1kx",
+        "timestamp": "2026-09-21T03:23:55.989Z",
+        "level": "warn",
+        "message": "[LOW] [owasp-security-headers] Identified: \"Missing Defensive HTTP Security Headers\" at https://httpbin.org/",
+        "templateId": "owasp-security-headers",
+        "severity": "low",
+        "templateName": "Missing Defensive HTTP Security Headers",
+        "payload": {
+          "method": "GET",
+          "url": "https://httpbin.org/",
+          "headers": {
+            "User-Agent": "DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)",
+            "Accept": "*/*"
+          },
+          "statusCode": 200,
+          "responseTimeMs": 920,
+          "matched": true,
+          "evidence": "HTTP GET 200 (920ms) — Missing defensive headers:\n• [MISSING] Content-Security-Policy\n• [MISSING] X-Frame-Options\n• [MISSING] X-Content-Type-Options: nosniff\n• [MISSING] Strict-Transport-Security (HSTS)",
+          "matchersCondition": "or"
+        }
+      },
+      {
+        "id": "log-1789961035989-9ya5",
+        "timestamp": "2026-09-21T03:23:55.989Z",
+        "level": "info",
+        "message": "Audit completed in 0.9s. Executed 1 templates with 5 concurrent threads, sent 1 requests. Consolidated 1 root finding(s)."
+      }
+    ],
+    "threads": 5
   }
 ]
