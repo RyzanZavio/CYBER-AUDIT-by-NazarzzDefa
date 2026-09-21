@@ -19,7 +19,7 @@ import {
   Globe,
   Database,
 } from 'lucide-react';
-import { CVE_DATABASE } from '../data/cveDatabase';
+import { CVE_DATABASE, getCveByIdFast } from '../data/cveDatabase';
 import { CveEntry, YamlTemplate } from '../types';
 import { NvdLiveInspectorModal } from './NvdLiveInspectorModal';
 
@@ -598,7 +598,7 @@ export function CveDatabaseExplorer({
                   <span className="text-slate-400 font-bold">NUCLEI-COMPLIANT YAML TEMPLATE:</span>
                   <button
                     onClick={() => {
-                      const item = CVE_DATABASE.find(c => c.cveId === activeCveModal.cveId);
+                      const item = getCveByIdFast(activeCveModal.cveId);
                       if (item) handleCopyYaml(activeCveModal, item.yamlTemplate.rawYaml);
                     }}
                     className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] transition-colors cursor-pointer"
@@ -615,7 +615,7 @@ export function CveDatabaseExplorer({
                   </button>
                 </div>
                 <pre className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-cyan-300/90 overflow-x-auto max-h-48 leading-tight">
-                  {CVE_DATABASE.find(c => c.cveId === activeCveModal.cveId)?.yamlTemplate.rawYaml}
+                  {getCveByIdFast(activeCveModal.cveId)?.yamlTemplate.rawYaml}
                 </pre>
               </div>
             </div>

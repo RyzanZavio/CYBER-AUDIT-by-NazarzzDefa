@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { DEFAULT_TEMPLATES } from './data/defaultTemplates';
 import { DEFAULT_EXTENSIONS } from './data/defaultExtensions';
-import { CVE_DATABASE } from './data/cveDatabase';
+import { CVE_DATABASE, getCveByIdFast } from './data/cveDatabase';
 import {
   BatchScanSummary,
   ExtensionManifest,
@@ -597,10 +597,8 @@ export default function App() {
     if (existing) {
       await handleUpdateTemplate({ ...existing, enabled: !existing.enabled });
     } else {
-      // Find from CVE database and enable it
-      const cveItem = CVE_DATABASE.find(
-        c => (c.templateId || c.cveId.toLowerCase()) === templateId
-      );
+      // Find from CVE database via O(1) hash index and enable it
+      const cveItem = getCveByIdFast(templateId);
       if (cveItem) {
         await handleUpdateTemplate({ ...cveItem.yamlTemplate, enabled: true });
       }

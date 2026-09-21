@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ScanResult, VulnerabilitySeverity } from '../types';
+import { isAggregatedFinding, ScanResult, VulnerabilitySeverity } from '../types';
 import { REPORT_LOCALES, ReportLanguage } from './reportLocales';
 
 const SEVERITY_COLORS: Record<VulnerabilitySeverity, [number, number, number]> = {
@@ -219,7 +219,7 @@ export function generatePdfReport(
 
       // 5. Aggregated Sub-Checks (if present)
       let subChecksH = 0;
-      if (finding.subFindings && finding.subFindings.length > 0) {
+      if (isAggregatedFinding(finding)) {
         subChecksH = finding.subFindings.length * 4.2 + 6;
       }
 
@@ -295,7 +295,7 @@ export function generatePdfReport(
       }
 
       // Aggregated Sub-Checks Summary
-      if (finding.subFindings && finding.subFindings.length > 0) {
+      if (isAggregatedFinding(finding)) {
         doc.setFillColor(241, 245, 249);
         doc.setDrawColor(203, 213, 225);
         doc.roundedRect(margin + 6, innerY, contentWidth - 12, subChecksH, 1, 1, 'FD');
