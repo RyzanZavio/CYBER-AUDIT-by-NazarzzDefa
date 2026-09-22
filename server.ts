@@ -314,7 +314,8 @@ async function startServer() {
   // NIST NVD 2.0 Real-time Intelligence & CVSS Integration Endpoints
   app.get('/api/nvd/status', async (req, res) => {
     try {
-      const status = await testNvdApiKeyStatus();
+      const forceRefresh = req.query.refresh === 'true';
+      const status = await testNvdApiKeyStatus(forceRefresh);
       res.json(status);
     } catch (err: any) {
       res.status(500).json({ connected: false, error: err.message });
@@ -462,7 +463,7 @@ async function startServer() {
     });
 
     try {
-      const { targetUrl, templateIds, timeoutMs, webhook } = req.body;
+      const { targetUrl, templateIds, timeoutMs, webhook, allowInternal, adaptiveDelay } = req.body;
 
       if (!targetUrl || typeof targetUrl !== 'string') {
         res.status(400).json({ error: 'Valid targetUrl is required' });
@@ -470,7 +471,7 @@ async function startServer() {
       }
 
       // SSRF & Target Validation (Async DNS check to prevent DNS rebinding)
-      const targetValidation = await validateTargetUrl(targetUrl);
+      const targetValidation = await validateTargetUrl(targetUrl, { allowInternal: !!allowInternal });
       if (!targetValidation.isValid) {
         res.status(400).json({
           error: targetValidation.error,
@@ -495,7 +496,7 @@ async function startServer() {
       const proxyConfig = db.getProxyConfig();
       const effectiveProxy = req.body.proxy || (proxyConfig.enabled ? proxyConfig : undefined);
 
-      console.log(`[Scan] Starting scan ${scanId} on target: ${validatedUrl} with ${templatesToRun.length} templates (Threads: ${threads}, Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'})`);
+      console.log(`[Scan] Starting scan ${scanId} on target: ${validatedUrl} with ${templatesToRun.length} templates (Threads: ${threads}, Proxy: ${effectiveProxy?.enabled ? effectiveProxy.url : 'Direct'}, Jitter: ${adaptiveDelay !== false ? 'Active' : 'Disabled'})`);
 
       const isStreaming = req.headers.accept?.includes('text/event-stream') || req.query.stream === 'true' || req.path.endsWith('/stream');
 
@@ -512,6 +513,8 @@ async function startServer() {
           timeoutMs: timeoutMs || 8000,
           userAgent: 'DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)',
           proxy: effectiveProxy,
+          allowInternal: !!allowInternal,
+          adaptiveDelay: adaptiveDelay !== false,
           onProgressLog: (log) => {
             res.write(`data: ${JSON.stringify({ type: 'log', log })}\n\n`);
           },
@@ -537,6 +540,8 @@ async function startServer() {
         timeoutMs: timeoutMs || 8000,
         userAgent: 'DevSecOps-Auditor/2.4 (OWASP-ZAP/Nuclei/BurpSuite)',
         proxy: effectiveProxy,
+        allowInternal: !!allowInternal,
+        adaptiveDelay: adaptiveDelay !== false,
       });
 
       // Save scan result to persistent database
@@ -651,7 +656,7 @@ async function startServer() {
     });
 
     try {
-      const { targets, templateIds, timeoutMs, proxy, webhook } = req.body;
+      const { targets, templateIds, timeoutMs, proxy, webhook, allowInternal, adaptiveDelay } = req.body;
 
       if (!Array.isArray(targets) || targets.length === 0) {
         res.status(400).json({ error: 'Array of target hosts is required' });
@@ -664,7 +669,7 @@ async function startServer() {
 
       for (const t of targets) {
         if (!t || typeof t !== 'string') continue;
-        const validation = await validateTargetUrl(t);
+        const validation = await validateTargetUrl(t, { allowInternal: !!allowInternal });
         if (validation.isValid && validation.normalizedUrl) {
           validatedTargets.push(validation.normalizedUrl);
         } else {
@@ -695,48 +700,62 @@ async function startServer() {
       let failedCount = 0;
       let isCancelled = false;
 
-      for (const target of validatedTargets) {
-        if (abortController.signal.aborted) {
-          isCancelled = true;
-          break;
-        }
+      // Parallelize across targets (target concurrency pool)
+      const targetConcurrency = Math.min(5, Math.max(1, Number(req.body?.targetConcurrency) || Math.min(3, validatedTargets.length)));
+      const threadsPerTarget = Math.max(2, Math.floor(threads / targetConcurrency) || 2);
+      let targetCursor = 0;
 
-        try {
-          const scanRes = await executeVulnerabilityScan(target, templatesToRun, {
-            scanId: `${scanId}-${target.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}`,
-            threads,
-            abortSignal: abortController.signal,
-            timeoutMs: timeoutMs || 6000,
-            proxy: effectiveProxy,
-          });
-          resultsByTarget[target] = scanRes;
-          allFindings.push(...scanRes.findings);
-          if (scanRes.status === 'cancelled') {
+      const targetWorkers = Array.from({ length: Math.min(targetConcurrency, validatedTargets.length) }, async () => {
+        while (targetCursor < validatedTargets.length) {
+          if (abortController.signal.aborted) {
             isCancelled = true;
             break;
           }
-          completedCount++;
-        } catch (err: any) {
-          failedCount++;
-          resultsByTarget[target] = {
-            id: `err-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-            targetUrl: target,
-            startTime: new Date().toISOString(),
-            status: 'failed',
-            findings: [],
-            templatesExecuted: 0,
-            requestsSent: 0,
-            logs: [
-              {
-                id: `err-${Date.now()}`,
-                timestamp: new Date().toLocaleTimeString(),
-                level: 'crit',
-                message: `Batch target execution failed: ${err.message}`,
-              },
-            ],
-          };
+          const targetIndex = targetCursor++;
+          const target = validatedTargets[targetIndex];
+          if (!target) break;
+
+          try {
+            const scanRes = await executeVulnerabilityScan(target, templatesToRun, {
+              scanId: `${scanId}-${target.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}`,
+              threads: threadsPerTarget,
+              abortSignal: abortController.signal,
+              timeoutMs: timeoutMs || 6000,
+              proxy: effectiveProxy,
+              allowInternal: !!allowInternal,
+              adaptiveDelay: adaptiveDelay !== false,
+            });
+            resultsByTarget[target] = scanRes;
+            allFindings.push(...scanRes.findings);
+            if (scanRes.status === 'cancelled') {
+              isCancelled = true;
+              break;
+            }
+            completedCount++;
+          } catch (err: any) {
+            failedCount++;
+            resultsByTarget[target] = {
+              id: `err-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+              targetUrl: target,
+              startTime: new Date().toISOString(),
+              status: 'failed',
+              findings: [],
+              templatesExecuted: 0,
+              requestsSent: 0,
+              logs: [
+                {
+                  id: `err-${Date.now()}`,
+                  timestamp: new Date().toLocaleTimeString(),
+                  level: 'crit',
+                  message: `Batch target execution failed: ${err.message}`,
+                },
+              ],
+            };
+          }
         }
-      }
+      });
+
+      await Promise.all(targetWorkers);
 
       const summary = {
         id: scanId,
@@ -789,7 +808,7 @@ async function startServer() {
   app.post('/api/proxy', apiKeyAuthMiddleware, async (req, res) => {
     const config: Partial<ProxyConfig> = req.body;
     if (config.url) {
-      const validation = await validateTargetUrl(config.url);
+      const validation = await validateTargetUrl(config.url, { allowInternal: !!req.body.allowInternal });
       if (!validation.isValid) {
         res.status(400).json({ error: validation.error, code: 'SSRF_BLOCKED' });
         return;
@@ -816,7 +835,7 @@ async function startServer() {
       }
 
       // SSRF validation for proxy address
-      const validation = await validateTargetUrl(proxyToTest.url);
+      const validation = await validateTargetUrl(proxyToTest.url, { allowInternal: !!req.body.allowInternal });
       if (!validation.isValid) {
         res.status(400).json({ success: false, message: `Proxy address blocked by SSRF filter: ${validation.error}` });
         return;
@@ -1019,6 +1038,13 @@ async function startServer() {
   app.post('/api/schedule', apiKeyAuthMiddleware, async (req, res) => {
     try {
       const newConfig = req.body;
+      if (newConfig.targetUrl) {
+        const validation = await validateTargetUrl(newConfig.targetUrl, { allowInternal: !!newConfig.allowInternal });
+        if (!validation.isValid) {
+          res.status(400).json({ error: validation.error, code: 'SSRF_BLOCKED' });
+          return;
+        }
+      }
       const state = updateSchedule(
         newConfig,
         () => db.getTemplates(),
@@ -1040,8 +1066,12 @@ async function startServer() {
 
     if (!appUrl) {
       const rawHost = req.get('host') || 'localhost:3000';
-      // Strictly sanitize and validate Host header to prevent Host Header Injection into shell script
-      const sanitizedHost = /^[a-zA-Z0-9.-]+(:[0-9]{1,5})?$/.test(rawHost) ? rawHost : 'localhost:3000';
+      // Defense-in-depth: only trust localhost or verified Cloud Run domains to prevent Host Header Injection
+      const isTrustedHost =
+        /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:[0-9]{1,5})?$/i.test(rawHost) ||
+        /\.(run\.app|appspot\.com|googleusercontent\.com)(:[0-9]{1,5})?$/i.test(rawHost);
+
+      const sanitizedHost = isTrustedHost ? rawHost : 'localhost:3000';
       const rawProto = (req.get('x-forwarded-proto') || 'http').toLowerCase();
       const sanitizedProto = rawProto === 'https' ? 'https' : 'http';
       appUrl = `${sanitizedProto}://${sanitizedHost}`;

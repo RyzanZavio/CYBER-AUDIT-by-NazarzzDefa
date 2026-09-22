@@ -9,7 +9,8 @@ let currentSchedule: ScheduleConfig = {
   enabled: true,
   timeString: '02:00',
   cronExpression: '0 2 * * *',
-  targetUrl: 'http://localhost:3000',
+  targetUrl: 'https://example.com',
+  allowInternal: false,
   selectedTemplateIds: [
     'owasp-security-headers',
     'exposed-env-credentials',
@@ -120,6 +121,7 @@ function scheduleDailyScan(
       const result = await executeVulnerabilityScan(config.targetUrl, activeTemplates, {
         timeoutMs: 8000,
         userAgent: 'DevSecOps-Daily-Automated-Auditor/2.4 (OWASP/Nuclei)',
+        allowInternal: !!config.allowInternal,
       });
 
       lastScheduledScanResult = result;

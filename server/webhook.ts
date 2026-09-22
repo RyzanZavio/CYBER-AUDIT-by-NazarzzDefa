@@ -1,4 +1,5 @@
 import { ScanResult, VulnerabilityFinding, WebhookConfig } from '../src/types';
+import { validateTargetUrl } from './ssrf-validator';
 
 export async function sendWebhookNotification(
   config: WebhookConfig,
@@ -7,6 +8,17 @@ export async function sendWebhookNotification(
   if (!config.url || !config.url.trim()) {
     return { success: false, message: 'Webhook URL is empty' };
   }
+
+  // Defense-in-depth: Validate Webhook target against SSRF attacks (require HTTPS, forbid private/internal destinations)
+  const validation = await validateTargetUrl(config.url.trim(), { requireHttps: true });
+  if (!validation.isValid) {
+    return {
+      success: false,
+      message: `Webhook destination blocked by SSRF policy: ${validation.error || 'Private/internal addresses prohibited'}`,
+    };
+  }
+
+  const safeWebhookUrl = validation.normalizedUrl || config.url.trim();
 
   const critCount = scan.findings.filter(f => f.severity === 'critical').length;
   const highCount = scan.findings.filter(f => f.severity === 'high').length;
@@ -116,12 +128,13 @@ export async function sendWebhookNotification(
       };
     }
 
-    const res = await fetch(config.url, {
+    const res = await fetch(safeWebhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000),
     });
 
     if (res.ok || res.status === 204) {

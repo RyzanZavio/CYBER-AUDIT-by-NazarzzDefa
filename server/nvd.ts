@@ -1,4 +1,4 @@
-import { CveDatabaseItem } from '../src/data/cveDatabase';
+import { CveDatabaseItem, RAW_CVE_DATABASE } from '../src/data/cveDatabase';
 import { VulnerabilitySeverity, YamlTemplate } from '../src/types';
 import { syncTemplateWithYaml } from '../src/utils/templateParser';
 
@@ -6,6 +6,53 @@ export const NVD_API_BASE = 'https://services.nvd.nist.gov/rest/json/cves/2.0';
 
 // Optional NVD API Key (configured securely via environment variable NVD_API_KEY)
 export const NVD_API_KEY = process.env.NVD_API_KEY || '';
+
+// Known CISA KEV (Known Exploited Vulnerabilities) set curated from verified intelligence
+const KNOWN_CISA_KEV_IDS = new Set<string>(
+  RAW_CVE_DATABASE.filter(c => c.isKev).map(c => c.cveId.toUpperCase())
+);
+
+/**
+ * Checks whether a CVE is genuinely documented in the CISA KEV catalog,
+ * using official NIST NVD 2.0 metadata fields, explicit tags, or the curated catalog.
+ * NEVER guesses based on CVSS score alone!
+ */
+export function isCisaKev(cveObj: any): boolean {
+  if (!cveObj || !cveObj.id) return false;
+  const idUpper = cveObj.id.toUpperCase();
+
+  // 1. Official CISA KEV fields present in NIST NVD 2.0 API schema
+  if (
+    cveObj.cisaExploitAdd ||
+    cveObj.cisaActionDue ||
+    cveObj.cisaRequiredAction ||
+    cveObj.cisaVulnerabilityName
+  ) {
+    return true;
+  }
+
+  // 2. Tagged explicitly in NVD metadata as knownExploited
+  if (Array.isArray(cveObj.cveTags)) {
+    const hasKevTag = cveObj.cveTags.some((t: any) => {
+      if (typeof t === 'string') {
+        const lower = t.toLowerCase();
+        return lower.includes('knownexploited') || lower === 'kev';
+      }
+      if (Array.isArray(t?.tags)) {
+        return t.tags.some((sub: string) => typeof sub === 'string' && sub.toLowerCase().includes('knownexploited'));
+      }
+      return false;
+    });
+    if (hasKevTag) return true;
+  }
+
+  // 3. Known verified CISA KEV intelligence catalog
+  if (KNOWN_CISA_KEV_IDS.has(idUpper)) {
+    return true;
+  }
+
+  return false;
+}
 
 export interface NvdCvssMetrics {
   version: string;
@@ -126,37 +173,86 @@ export function extractCvssMetrics(metrics: any): NvdCvssMetrics {
 }
 
 /**
- * Maps CWE to OWASP Top 10 Category
+ * Maps CWE to OWASP Top 10 Category (2021 edition)
  */
 export function mapCweToOwasp(cweId: string): string {
   const cwe = cweId.toUpperCase();
-  if (['CWE-89', 'CWE-77', 'CWE-78', 'CWE-94', 'CWE-502', 'CWE-917', 'CWE-79'].some(c => cwe.includes(c))) {
-    return 'A03:2021-Injection';
-  }
-  if (['CWE-287', 'CWE-384', 'CWE-288', 'CWE-306', 'CWE-798'].some(c => cwe.includes(c))) {
-    return 'A07:2021-Identification and Authentication Failures';
-  }
-  if (['CWE-22', 'CWE-23', 'CWE-639', 'CWE-862', 'CWE-863', 'CWE-200'].some(c => cwe.includes(c))) {
+
+  // A01:2021 - Broken Access Control
+  if (
+    ['CWE-22', 'CWE-23', 'CWE-352', 'CWE-284', 'CWE-285', 'CWE-639', 'CWE-862', 'CWE-863', 'CWE-200', 'CWE-913'].some(
+      c => cwe.includes(c)
+    )
+  ) {
     return 'A01:2021-Broken Access Control';
   }
+
+  // A02:2021 - Cryptographic Failures
+  if (
+    ['CWE-327', 'CWE-326', 'CWE-328', 'CWE-330', 'CWE-310', 'CWE-311', 'CWE-312', 'CWE-319', 'CWE-347'].some(c =>
+      cwe.includes(c)
+    )
+  ) {
+    return 'A02:2021-Cryptographic Failures';
+  }
+
+  // A03:2021 - Injection
+  if (
+    ['CWE-89', 'CWE-77', 'CWE-78', 'CWE-94', 'CWE-502', 'CWE-917', 'CWE-79', 'CWE-116'].some(c => cwe.includes(c))
+  ) {
+    return 'A03:2021-Injection';
+  }
+
+  // A04:2021 - Insecure Design
+  if (['CWE-400', 'CWE-770', 'CWE-209', 'CWE-256'].some(c => cwe.includes(c))) {
+    return 'A04:2021-Insecure Design';
+  }
+
+  // A05:2021 - Security Misconfiguration
+  if (['CWE-16', 'CWE-693', 'CWE-1004', 'CWE-614', 'CWE-548'].some(c => cwe.includes(c))) {
+    return 'A05:2021-Security Misconfiguration';
+  }
+
+  // A06:2021 - Vulnerable and Outdated Components
+  if (['CWE-1104', 'CWE-1395', 'CWE-119', 'CWE-120', 'CWE-125', 'CWE-416', 'CWE-787'].some(c => cwe.includes(c))) {
+    return 'A06:2021-Vulnerable and Outdated Components';
+  }
+
+  // A07:2021 - Identification and Authentication Failures
+  if (
+    ['CWE-287', 'CWE-384', 'CWE-288', 'CWE-306', 'CWE-798', 'CWE-640', 'CWE-522', 'CWE-307'].some(c =>
+      cwe.includes(c)
+    )
+  ) {
+    return 'A07:2021-Identification and Authentication Failures';
+  }
+
+  // A08:2021 - Software and Data Integrity Failures
+  if (['CWE-494', 'CWE-565', 'CWE-829', 'CWE-345'].some(c => cwe.includes(c))) {
+    return 'A08:2021-Software and Data Integrity Failures';
+  }
+
+  // A09:2021 - Security Logging and Monitoring Failures
+  if (['CWE-778', 'CWE-117', 'CWE-532'].some(c => cwe.includes(c))) {
+    return 'A09:2021-Security Logging and Monitoring Failures';
+  }
+
+  // A10:2021 - Server-Side Request Forgery (SSRF)
   if (['CWE-918', 'CWE-611'].some(c => cwe.includes(c))) {
     return 'A10:2021-Server-Side Request Forgery (SSRF)';
   }
-  if (['CWE-16', 'CWE-693', 'CWE-1004', 'CWE-614'].some(c => cwe.includes(c))) {
-    return 'A05:2021-Security Misconfiguration';
-  }
-  if (['CWE-1104', 'CWE-1395'].some(c => cwe.includes(c))) {
-    return 'A06:2021-Vulnerable and Outdated Components';
-  }
+
   return 'A06:2021-Vulnerable and Outdated Components';
 }
 
 /**
  * Extracts affected tech and CPEs from NVD configuration nodes
  */
-export function extractCpeInfo(configurations: any[]): { tech: string; cpeList: string[] } {
+export function extractCpeInfo(configurations: any[]): { tech: string; vendor: string; product: string; cpeList: string[] } {
   const cpeList: string[] = [];
   let detectedTech = '';
+  let detectedVendor = '';
+  let detectedProduct = '';
 
   if (Array.isArray(configurations)) {
     for (const config of configurations) {
@@ -169,9 +265,11 @@ export function extractCpeInfo(configurations: any[]): { tech: string; cpeList: 
                 // Extract human-friendly software vendor/product from cpe:2.3:a:vendor:product:version:...
                 const parts = match.criteria.split(':');
                 if (parts.length >= 5 && !detectedTech) {
-                  const vendor = parts[3].replace(/_/g, ' ');
-                  const product = parts[4].replace(/_/g, ' ');
-                  detectedTech = `${vendor.charAt(0).toUpperCase() + vendor.slice(1)} ${product.charAt(0).toUpperCase() + product.slice(1)}`;
+                  detectedVendor = parts[3].replace(/_/g, ' ').trim();
+                  detectedProduct = parts[4].replace(/_/g, ' ').trim();
+                  const vendorCap = detectedVendor.charAt(0).toUpperCase() + detectedVendor.slice(1);
+                  const productCap = detectedProduct.charAt(0).toUpperCase() + detectedProduct.slice(1);
+                  detectedTech = `${vendorCap} ${productCap}`.trim();
                 }
               }
             }
@@ -183,60 +281,95 @@ export function extractCpeInfo(configurations: any[]): { tech: string; cpeList: 
 
   return {
     tech: detectedTech || 'Enterprise Application / Web Service',
+    vendor: detectedVendor,
+    product: detectedProduct,
     cpeList: cpeList.slice(0, 10),
   };
 }
 
 /**
- * Generates a valid Nuclei-compliant YAML template from live NVD metadata
+ * Generates a valid Nuclei-compliant YAML template from live NVD metadata.
+ * NOTE: NVD templates are saved in reference mode (enabled: false) by default
+ * to prevent false positives until verified by an auditor.
  */
 export function generateYamlTemplateFromNvd(cveDetail: Omit<NvdCveDetail, 'generatedYamlTemplate'>): YamlTemplate {
   const templateId = cveDetail.cveId.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const yearMatch = cveDetail.cveId.match(/CVE-(\d{4})-/i);
   const year = yearMatch ? yearMatch[1] : '2024';
 
+  const descSanitized = cveDetail.description.replace(/"/g, "'").replace(/\r?\n/g, ' ').trim();
+  const descTruncated = descSanitized.length > 200 ? `${descSanitized.slice(0, 197)}...` : descSanitized;
+  const safeName = cveDetail.name.replace(/"/g, "'").replace(/\r?\n/g, ' ').trim();
+  const safeTech = cveDetail.affectedTech.replace(/"/g, "'").replace(/\r?\n/g, ' ').trim();
+
+  // Extract a specific technology keyword if identifiable
+  const { vendor, product } = extractCpeInfo(cveDetail.cpeConfigurations);
+  const techKeyword = (product || vendor || '').trim();
+  const hasSpecificTech =
+    techKeyword.length >= 3 &&
+    !['application', 'service', 'enterprise', 'web service'].includes(techKeyword.toLowerCase());
+
+  // Technology fingerprint matcher: requires actual software signature presence + status 200
+  // Never uses generic 200/403/500 status-only matchers that falsely match every website!
+  const matchersYaml = hasSpecificTech
+    ? `    matchers-condition: and
+    matchers:
+      - type: word
+        part: all
+        words:
+          - "${techKeyword.toLowerCase().replace(/"/g, '')}"
+        case-insensitive: true
+      - type: status
+        status:
+          - 200`
+    : `    # NOTE: NVD vulnerability entry imported in reference/advisory mode.
+    # Specify targeted path and proof-of-concept word/header matchers before enabling active scans.
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "X-Signature-Verified-Manual"
+      - type: status
+        status:
+          - 200`;
+
   const rawYaml = `id: ${templateId}
 info:
-  name: "${cveDetail.name.replace(/"/g, "'")}"
+  name: "${safeName}"
   author: nvd-nist-cve-sync
   severity: ${cveDetail.cvss.severity}
-  description: "${cveDetail.description.replace(/"/g, "'").slice(0, 200)}..."
+  description: "${descTruncated}"
   reference:
     - https://nvd.nist.gov/vuln/detail/${cveDetail.cveId}
 ${cveDetail.references.slice(0, 3).map(r => `    - ${r.url}`).join('\n')}
-  tags: cve,cve-${year},nvd-synced,cvss-${cveDetail.cvss.baseScore}
+  tags: cve,cve-${year},nvd-synced,cvss-${cveDetail.cvss.baseScore},nvd-advisory${
+    hasSpecificTech ? `,tech-${techKeyword.toLowerCase().replace(/[^a-z0-9]/g, '-')}` : ''
+  }
   classification:
     cvss-score: ${cveDetail.cvss.baseScore}
     cvss-vector: "${cveDetail.cvss.vectorString}"
     cwe-id: ${cveDetail.cweId}
     owasp-category: "${cveDetail.owaspCategory}"
-  remediation: "Apply the vendor security patch or upgrade the affected component (${cveDetail.affectedTech})."
+  remediation: "Apply the vendor security patch or upgrade the affected component (${safeTech})."
 
 requests:
   - method: GET
     path:
       - "{{BaseURL}}/"
-      - "{{BaseURL}}/version"
-      - "{{BaseURL}}/api/health"
     headers:
       User-Agent: "DevSecOps-CVE-Probe/2.4 (+https://nvd.nist.gov/vuln/detail/${cveDetail.cveId})"
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-          - 500
-          - 403
+${matchersYaml}
 `;
 
   return syncTemplateWithYaml({
     id: templateId,
     rawYaml,
-    name: cveDetail.name,
+    name: safeName,
     severity: cveDetail.cvss.severity,
     description: cveDetail.description,
-    tags: ['cve', `cve-${year}`, 'nvd-synced', `cvss-${cveDetail.cvss.baseScore}`],
-    enabled: true,
+    tags: ['cve', `cve-${year}`, 'nvd-synced', `cvss-${cveDetail.cvss.baseScore}`, 'nvd-advisory'],
+    enabled: false, // CRITICAL: Disabled by default to prevent false-positive contamination of active audits!
     isBuiltin: false,
     author: 'nvd-nist-cve-sync',
   });
@@ -331,7 +464,7 @@ export async function fetchNvdCveById(cveId: string): Promise<NvdCveDetail | nul
     affectedTech: tech,
     cpeConfigurations: cpeList,
     references: refs,
-    isKev: cveObj.cveTags?.some((t: any) => t === 'disputed' || t === 'unsupported-when-assigned') ? false : cvss.baseScore >= 9.0,
+    isKev: isCisaKev(cveObj),
   };
 
   const generatedYamlTemplate = generateYamlTemplateFromNvd(detailWithoutTpl);
@@ -405,7 +538,7 @@ export async function searchNvdCves(keyword: string, limit = 15): Promise<NvdCve
         affectedTech: tech,
         cpeConfigurations: cpeList,
         references: refs,
-        isKev: cvss.baseScore >= 9.0,
+        isKev: isCisaKev(cveObj),
       };
 
       results.push({
@@ -418,10 +551,15 @@ export async function searchNvdCves(keyword: string, limit = 15): Promise<NvdCve
   return results;
 }
 
+// In-memory cache for API status to prevent rate-limit exhaustion
+let cachedNvdStatus: { data: any; timestamp: number } | null = null;
+const NVD_STATUS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+
 /**
- * Tests NVD API connectivity and verifies the API Key with a lightweight request
+ * Tests NVD API connectivity and verifies the API Key with a lightweight request.
+ * Results are cached for 5 minutes unless force is set to true.
  */
-export async function testNvdApiKeyStatus(): Promise<{
+export async function testNvdApiKeyStatus(force = false): Promise<{
   connected: boolean;
   apiKeyActive: boolean;
   apiKeyMasked: string;
@@ -429,7 +567,13 @@ export async function testNvdApiKeyStatus(): Promise<{
   message: string;
   sampleCve?: string;
   latencyMs: number;
+  cached?: boolean;
 }> {
+  const now = Date.now();
+  if (!force && cachedNvdStatus && now - cachedNvdStatus.timestamp < NVD_STATUS_CACHE_TTL_MS) {
+    return { ...cachedNvdStatus.data, cached: true };
+  }
+
   const start = Date.now();
   const maskedKey = NVD_API_KEY
     ? `${NVD_API_KEY.slice(0, 8)}...${NVD_API_KEY.slice(-4)}`
@@ -439,7 +583,7 @@ export async function testNvdApiKeyStatus(): Promise<{
     const sample = await fetchNvdCveById('CVE-2024-4577');
     const latency = Date.now() - start;
 
-    return {
+    const result = {
       connected: true,
       apiKeyActive: !!NVD_API_KEY,
       apiKeyMasked: maskedKey,
@@ -449,15 +593,23 @@ export async function testNvdApiKeyStatus(): Promise<{
         : `NIST NVD Terhubung dalam mode anonim (Limit: 5 req/30s)`,
       sampleCve: sample ? `${sample.cveId} (CVSS ${sample.cvss.baseScore})` : undefined,
       latencyMs: latency,
+      cached: false,
     };
+
+    cachedNvdStatus = { data: result, timestamp: now };
+    return result;
   } catch (err: any) {
-    return {
+    const latency = Date.now() - start;
+    const result = {
       connected: false,
       apiKeyActive: !!NVD_API_KEY,
       apiKeyMasked: maskedKey,
       rateLimitPer30s: 5,
       message: `Gagal terhubung ke NIST NVD API: ${err.message}`,
-      latencyMs: Date.now() - start,
+      latencyMs: latency,
+      cached: false,
     };
+    cachedNvdStatus = { data: result, timestamp: now };
+    return result;
   }
 }

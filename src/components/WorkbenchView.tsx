@@ -330,6 +330,14 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
             <span className="text-[#a1a1aa]">{proxyConfig.enabled ? 'BURP:8080' : 'DIRECT'}</span>
           </div>
 
+          {/* WAF Detection Tag */}
+          {scan?.wafDetected && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-amber-950/80 border border-amber-700/60 text-[11px] text-amber-300 font-mono">
+              <ShieldAlert className="w-3 h-3 text-amber-400" />
+              <span>WAF: {scan.wafDetected}</span>
+            </div>
+          )}
+
           {/* Concurrency Threads Selector */}
           <div className="flex items-center gap-1.5 px-2 py-1 bg-[#12141a] border border-[#27272a] text-xs">
             <Cpu className="w-3.5 h-3.5 text-cyan-400" />

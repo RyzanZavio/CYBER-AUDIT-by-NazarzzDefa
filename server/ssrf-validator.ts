@@ -25,6 +25,7 @@ export interface TargetValidationResult {
   normalizedUrl?: string;
   error?: string;
   isInternal?: boolean;
+  resolvedIps?: string[];
 }
 
 /**
@@ -152,14 +153,17 @@ export async function validateTargetUrl(
   }
 
   // Asynchronous DNS Resolution to prevent DNS Rebinding / spoofed domain bypass
+  let resolvedIps: string[] = [];
   try {
     const lookupResults = await dns.promises.lookup(hostname, { all: true });
+    resolvedIps = lookupResults.map(r => r.address);
     for (const record of lookupResults) {
       if (isPrivateOrReservedIp(record.address) && !isInternalAllowed) {
         return {
           isValid: false,
           error: `SSRF Protection: Hostname "${hostname}" resolves to private/internal IP address "${record.address}". Requests to RFC1918/Loopback/IMDS addresses are blocked.`,
           isInternal: true,
+          resolvedIps,
         };
       }
     }
@@ -170,9 +174,14 @@ export async function validateTargetUrl(
     };
   }
 
+  // Preserve query parameters (?id=5) and search string while normalizing path
+  const normalizedPath = parsed.pathname === '/' && !parsed.search ? '' : parsed.pathname;
+  const normalizedUrl = `${parsed.origin}${normalizedPath}${parsed.search}`;
+
   return {
     isValid: true,
-    normalizedUrl: parsed.origin + (parsed.pathname === '/' ? '' : parsed.pathname),
+    normalizedUrl,
     isInternal: false,
+    resolvedIps,
   };
 }

@@ -80,6 +80,12 @@ export interface YamlTemplate {
   enabled: boolean;
   isBuiltin?: boolean;
   author?: string;
+  remediation?: string;
+  references?: string[];
+  cvssScore?: number;
+  cvssVector?: string;
+  cweId?: string;
+  owaspCategory?: string;
 }
 
 export interface ScanPayloadInfo {
@@ -121,6 +127,8 @@ export interface ScanResult {
   detectedTechnologies?: string[];
   cveMatchedCount?: number;
   threads?: number;
+  wafDetected?: string;
+  adaptiveDelayApplied?: boolean;
 }
 
 export interface WebhookConfig {
@@ -136,6 +144,7 @@ export interface ScheduleConfig {
   timeString: string; // e.g. "02:00"
   cronExpression: string; // e.g. "0 2 * * *"
   targetUrl: string;
+  allowInternal?: boolean;
   selectedTemplateIds: string[];
   notifyWebhook: boolean;
   lastRun?: string;
