@@ -1,6 +1,19 @@
 export function generateLinuxWslCliScript(rawAppUrl: string): string {
   // Defensive sanitization against Host Header Injection and shell metacharacters
-  const appUrl = (rawAppUrl || 'http://localhost:3000').replace(/[^a-zA-Z0-9.:\/-]/g, '');
+  let appUrl = 'http://localhost:3000';
+  try {
+    if (rawAppUrl && typeof rawAppUrl === 'string') {
+      const parsed = new URL(rawAppUrl);
+      if (
+        (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+        !/[^a-zA-Z0-9.:\/-]/.test(parsed.origin)
+      ) {
+        appUrl = parsed.origin;
+      }
+    }
+  } catch {
+    appUrl = 'http://localhost:3000';
+  }
 
   return `#!/usr/bin/env bash
 # ==============================================================================

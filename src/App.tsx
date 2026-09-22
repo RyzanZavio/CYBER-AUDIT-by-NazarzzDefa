@@ -114,7 +114,8 @@ export default function App() {
     enabled: true,
     timeString: '02:00',
     cronExpression: '0 2 * * *',
-    targetUrl: 'http://localhost:3000',
+    targetUrl: 'https://example.com',
+    allowInternal: false,
     selectedTemplateIds: [],
     notifyWebhook: true,
     status: 'idle',
@@ -276,7 +277,11 @@ export default function App() {
     targetUrl: string,
     selectedTemplateIds: string[],
     timeoutMs: number,
-    threads: number = 10
+    threads: number = 10,
+    options?: {
+      adaptiveDelay?: boolean;
+      allowInternal?: boolean;
+    }
   ) => {
     const scanId = `scan-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     currentScanIdRef.current = scanId;
@@ -297,7 +302,7 @@ export default function App() {
       {
         timestamp: new Date().toLocaleTimeString(),
         level: 'info',
-        message: `Target: ${targetUrl} | Templates: ${selectedTemplateIds.length} | Concurrency: ${threads} worker threads`,
+        message: `Target: ${targetUrl} | Templates: ${selectedTemplateIds.length} | Concurrency: ${threads} worker threads | Jitter: ${options?.adaptiveDelay !== false ? 'Active' : 'Off'}`,
       },
       {
         timestamp: new Date().toLocaleTimeString(),
@@ -322,6 +327,8 @@ export default function App() {
           timeoutMs,
           threads,
           webhook: webhookConfig,
+          adaptiveDelay: options?.adaptiveDelay !== false,
+          allowInternal: options?.allowInternal ?? false,
         }),
       });
 

@@ -26,11 +26,23 @@ export function extractMetadataFromYaml(rawYaml: string, defaultId?: string): Pa
     throw new Error('Invalid YAML: content must be an object.');
   }
 
-  const id = parsed.id || defaultId || 'custom-template';
+  const rawId = String(parsed.id || defaultId || 'custom-template').trim();
+  const id =
+    rawId
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 80) || 'custom-template';
   const info = parsed.info || {};
-  const name = info.name || id;
-  const severity = (info.severity || 'medium').toLowerCase() as VulnerabilitySeverity;
-  const description = info.description || 'Custom security audit template';
+  const name = typeof info.name === 'string' ? info.name.trim() : id;
+  
+  const rawSev = typeof info.severity === 'string' ? info.severity.toLowerCase().trim() : 'medium';
+  const severity: VulnerabilitySeverity = ['critical', 'high', 'medium', 'low', 'info'].includes(rawSev)
+    ? (rawSev as VulnerabilitySeverity)
+    : 'medium';
+
+  const description = typeof info.description === 'string' ? info.description.trim() : 'Custom security audit template';
   
   let tags: string[] = [];
   if (Array.isArray(info.tags)) {
@@ -41,22 +53,26 @@ export function extractMetadataFromYaml(rawYaml: string, defaultId?: string): Pa
     tags = ['custom'];
   }
 
-  const author = info.author;
-  const remediation = info.remediation;
+  const author = typeof info.author === 'string' ? info.author.trim() : undefined;
+  const remediation = typeof info.remediation === 'string' ? info.remediation.trim() : undefined;
   let references: string[] = [];
   if (Array.isArray(info.reference)) {
-    references = info.reference.map((r: any) => String(r).trim());
+    references = info.reference.map((r: any) => String(r).trim()).filter(Boolean);
   } else if (typeof info.reference === 'string') {
-    references = [info.reference.trim()];
+    references = [info.reference.trim()].filter(Boolean);
   }
 
   const classification = info.classification || {};
-  const cvssScore = typeof classification['cvss-score'] === 'number' 
-    ? classification['cvss-score'] 
-    : undefined;
-  const cvssVector = classification['cvss-vector'];
-  const cweId = classification['cwe-id'];
-  const owaspCategory = classification['owasp-category'];
+  const rawCvss = classification['cvss-score'];
+  const cvssScore =
+    typeof rawCvss === 'number' && !isNaN(rawCvss) && rawCvss >= 0 && rawCvss <= 10
+      ? rawCvss
+      : typeof rawCvss === 'string' && !isNaN(parseFloat(rawCvss))
+      ? Math.min(10, Math.max(0, parseFloat(rawCvss)))
+      : undefined;
+  const cvssVector = typeof classification['cvss-vector'] === 'string' ? classification['cvss-vector'].trim() : undefined;
+  const cweId = typeof classification['cwe-id'] === 'string' ? classification['cwe-id'].trim().toUpperCase() : undefined;
+  const owaspCategory = typeof classification['owasp-category'] === 'string' ? classification['owasp-category'].trim() : undefined;
 
   return {
     id,
@@ -76,7 +92,7 @@ export function extractMetadataFromYaml(rawYaml: string, defaultId?: string): Pa
 
 /**
  * Normalizes a YamlTemplate object ensuring outer properties match the YAML content.
- * Falls back gracefully to existing outer properties if YAML parsing fails temporarily.
+ * Retains all classification, CVSS, CWE, OWASP, remediation, and reference metadata.
  */
 export function syncTemplateWithYaml(template: Partial<YamlTemplate> & { rawYaml: string }): YamlTemplate {
   try {
@@ -88,6 +104,12 @@ export function syncTemplateWithYaml(template: Partial<YamlTemplate> & { rawYaml
       description: meta.description,
       tags: meta.tags,
       author: meta.author,
+      remediation: meta.remediation ?? template.remediation,
+      references: meta.references && meta.references.length > 0 ? meta.references : template.references,
+      cvssScore: meta.cvssScore ?? template.cvssScore,
+      cvssVector: meta.cvssVector ?? template.cvssVector,
+      cweId: meta.cweId ?? template.cweId,
+      owaspCategory: meta.owaspCategory ?? template.owaspCategory,
       enabled: template.enabled ?? true,
       isBuiltin: template.isBuiltin ?? false,
       rawYaml: template.rawYaml,
@@ -100,9 +122,26 @@ export function syncTemplateWithYaml(template: Partial<YamlTemplate> & { rawYaml
       description: template.description || 'Custom security audit template',
       tags: template.tags || ['custom'],
       author: template.author || 'analyst',
+      remediation: template.remediation,
+      references: template.references,
+      cvssScore: template.cvssScore,
+      cvssVector: template.cvssVector,
+      cweId: template.cweId,
+      owaspCategory: template.owaspCategory,
       enabled: template.enabled ?? true,
       isBuiltin: template.isBuiltin ?? false,
       rawYaml: template.rawYaml,
     };
   }
+}
+
+/**
+ * Validates template YAML syntax strictly and returns the extracted metadata,
+ * or throws an informative Error if parsing fails.
+ */
+export function validateTemplateYaml(rawYaml: string, defaultId?: string): ParsedTemplateMeta {
+  if (!rawYaml || typeof rawYaml !== 'string' || rawYaml.trim().length === 0) {
+    throw new Error('Template YAML content cannot be empty.');
+  }
+  return extractMetadataFromYaml(rawYaml, defaultId);
 }

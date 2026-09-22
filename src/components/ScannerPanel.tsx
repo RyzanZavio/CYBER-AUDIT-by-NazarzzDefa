@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Sliders,
   AlertTriangle,
+  ShieldAlert,
 } from 'lucide-react';
 import { ScanResult, YamlTemplate } from '../types';
 import { generatePdfReport } from '../utils/pdfGenerator';
@@ -24,7 +25,13 @@ import { generatePdfReport } from '../utils/pdfGenerator';
 interface ScannerPanelProps {
   templates: YamlTemplate[];
   isScanning: boolean;
-  onStartScan: (targetUrl: string, selectedTemplateIds: string[], timeoutMs: number, threads?: number) => Promise<void>;
+  onStartScan: (
+    targetUrl: string,
+    selectedTemplateIds: string[],
+    timeoutMs: number,
+    threads?: number,
+    options?: { adaptiveDelay?: boolean; allowInternal?: boolean }
+  ) => Promise<void>;
   onCancelScan?: () => void;
   lastScan: ScanResult | null;
   onViewFindingsTab: () => void;
@@ -45,6 +52,8 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [timeoutSec, setTimeoutSec] = useState<number>(8);
   const [threads, setThreads] = useState<number>(10);
+  const [adaptiveDelay, setAdaptiveDelay] = useState<boolean>(true);
+  const [allowInternal, setAllowInternal] = useState<boolean>(false);
 
   // Allow ESC key to immediately cancel active audit
   useEffect(() => {
@@ -87,7 +96,10 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
 
   const handleLaunch = () => {
     if (!targetUrl.trim() || isScanning) return;
-    onStartScan(targetUrl.trim(), selectedTemplateIds, timeoutSec * 1000, threads);
+    onStartScan(targetUrl.trim(), selectedTemplateIds, timeoutSec * 1000, threads, {
+      adaptiveDelay,
+      allowInternal,
+    });
   };
 
   const enabledCount = selectedTemplateIds.length;
@@ -255,7 +267,7 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
         {/* Scan Status Ribbon if running or recently completed */}
         {lastScan && (
           <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {lastScan.status === 'cancelled' ? (
                 <>
                   <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -274,6 +286,13 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
                     {((lastScan.durationMs || 1000) / 1000).toFixed(1)}s
                   </span>
                 </>
+              )}
+
+              {lastScan.wafDetected && (
+                <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-amber-950/80 border border-amber-600/70 text-amber-300 font-semibold flex items-center gap-1">
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                  WAF Detected: {lastScan.wafDetected}
+                </span>
               )}
             </div>
 
@@ -394,6 +413,54 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
                   />
                   <span className="text-slate-400">seconds</span>
                 </div>
+              </div>
+
+              {/* Adaptive Delay & Jitter Anti-Banned Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-white">Adaptive Delay &amp; Jitter (Anti-Banned / Anonymity)</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold">
+                      STEALTH
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 block max-w-xl">
+                    Randomizes inter-request probe intervals and engages automatic backoff when Cloudflare/AWS/Imperva WAFs or HTTP 429 rate-limits are detected.
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={adaptiveDelay}
+                    onChange={e => setAdaptiveDelay(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
+                </label>
+              </div>
+
+              {/* Allow Internal Scope Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-white">Allow Internal Subnets &amp; Localhost</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-950 text-amber-300 border border-amber-800 font-bold">
+                      SSRF OVERRIDE
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 block max-w-xl">
+                    By default, scanning loopback (127.0.0.1) and RFC1918 subnets is blocked for safety. Enable this for testing isolated local testbeds.
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={allowInternal}
+                    onChange={e => setAllowInternal(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
+                </label>
               </div>
             </div>
           )}

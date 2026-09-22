@@ -205,6 +205,23 @@ jobs:
               />
             </div>
 
+            {/* Internal / Staging Target Toggle */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
+              <div>
+                <span className="text-xs font-medium text-white block">Allow Private/Internal Network Audit</span>
+                <span className="text-[11px] text-slate-400">
+                  Permit testing localhost, 127.0.0.1, and RFC 1918 private subnets.
+                </span>
+              </div>
+              <input
+                id="schedule-allow-internal-checkbox"
+                type="checkbox"
+                checked={!!formSchedule.allowInternal}
+                onChange={e => setFormSchedule(prev => ({ ...prev, allowInternal: e.target.checked }))}
+                className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0 cursor-pointer"
+              />
+            </div>
+
             {/* Webhook alert toggle */}
             <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
               <div>

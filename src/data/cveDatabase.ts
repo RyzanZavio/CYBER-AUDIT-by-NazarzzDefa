@@ -157,9 +157,8 @@ requests:
       - type: word
         part: body
         words:
-          - "root:.*:0:0:"
-          - "bin/bash"
-          - "bin/sh"
+          - "root:x:0:0:"
+          - "daemon:x:1:1:"
         condition: or
 `,
   },
@@ -210,8 +209,8 @@ requests:
         part: body
         words:
           - "GlobalProtect"
-          - "Portal"
-        condition: or
+          - "pan_login"
+        condition: and
 `,
   },
   {
@@ -1012,8 +1011,8 @@ requests:
         part: body
         words:
           - "999"
-          - "confluence"
-        condition: or
+          - "queryString"
+        condition: and
 `,
   },
   {
