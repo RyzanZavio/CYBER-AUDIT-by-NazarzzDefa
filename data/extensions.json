@@ -1,0 +1,203 @@
+[
+  {
+    "id": "ext-owasp-api",
+    "name": "OWASP API Security Top 10 Suite",
+    "version": "1.4.0",
+    "author": "OWASP API Security Project",
+    "description": "Specialized API auditing rules for REST & GraphQL endpoints, covering BOLA, Mass Assignment, and Unauthenticated Introspection.",
+    "category": "owasp",
+    "installed": true,
+    "enabled": true,
+    "templatesCount": 2,
+    "repositoryUrl": "https://github.com/OWASP/API-Security",
+    "templates": [
+      {
+        "id": "graphql-introspection-enabled",
+        "name": "GraphQL Introspection Query Enabled",
+        "severity": "medium",
+        "description": "Verifies if production GraphQL endpoints leak full backend data structure and types via public schema introspection queries.",
+        "tags": [
+          "owasp-api",
+          "graphql",
+          "recon",
+          "information-disclosure"
+        ],
+        "author": "devsecops-auditor",
+        "remediation": "Disable GraphQL Schema Introspection in production environments.\nIn Apollo Server: introspection: process.env.NODE_ENV !== 'production'\nIn GraphQL Yoga: useDisableIntrospection() plugin",
+        "references": [
+          "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL"
+        ],
+        "cvssScore": 5.3,
+        "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+        "cweId": "CWE-200",
+        "owaspCategory": "A05:2021-Security Misconfiguration",
+        "enabled": true,
+        "isBuiltin": false,
+        "rawYaml": "id: graphql-introspection-enabled\ninfo:\n  name: GraphQL Introspection Query Enabled\n  author: devsecops-auditor\n  severity: medium\n  description: Verifies if production GraphQL endpoints leak full backend data structure and types via public schema introspection queries.\n  reference:\n    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL\n  tags: owasp-api,graphql,recon,information-disclosure\n  classification:\n    cvss-score: 5.3\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N\n    cwe-id: CWE-200\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: |\n    Disable GraphQL Schema Introspection in production environments.\n    In Apollo Server: introspection: process.env.NODE_ENV !== 'production'\n    In GraphQL Yoga: useDisableIntrospection() plugin\n\nrequests:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/graphql\"\n      - \"{{BaseURL}}/api/graphql\"\n    headers:\n      Content-Type: application/json\n    body: '{\"query\": \"{ __schema { types { name } } }\"}'\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"__schema\"\n          - \"types\"\n"
+      },
+      {
+        "id": "api-debug-endpoints",
+        "name": "Exposed Interactive API Documentation / Actuator Probe",
+        "severity": "low",
+        "description": "Checks if interactive OpenAPI/Swagger UI or Spring Boot Actuator health/metric endpoints are exposed without authentication.",
+        "tags": [
+          "owasp-api",
+          "swagger",
+          "exposure",
+          "defense"
+        ],
+        "author": "devsecops-auditor",
+        "remediation": "Restrict public access to Swagger UI, OpenAPI JSON documentation, and Actuator health/metric endpoints using authentication middleware or internal network firewall rules.",
+        "references": [
+          "https://owasp.org/www-project-api-security/"
+        ],
+        "cvssScore": 3.1,
+        "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+        "cweId": "CWE-200",
+        "owaspCategory": "A05:2021-Security Misconfiguration",
+        "enabled": true,
+        "isBuiltin": false,
+        "rawYaml": "id: api-debug-endpoints\ninfo:\n  name: Exposed Interactive API Documentation / Actuator Probe\n  author: devsecops-auditor\n  severity: low\n  description: Checks if interactive OpenAPI/Swagger UI or Spring Boot Actuator health/metric endpoints are exposed without authentication.\n  reference:\n    - https://owasp.org/www-project-api-security/\n  tags: owasp-api,swagger,exposure,defense\n  classification:\n    cvss-score: 3.1\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N\n    cwe-id: CWE-200\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: |\n    Restrict public access to Swagger UI, OpenAPI JSON documentation, and Actuator health/metric endpoints using authentication middleware or internal network firewall rules.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/v2/api-docs\"\n      - \"{{BaseURL}}/v3/api-docs\"\n      - \"{{BaseURL}}/swagger-ui/index.html\"\n      - \"{{BaseURL}}/swagger-ui.html\"\n      - \"{{BaseURL}}/actuator/health\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - '\"swagger\":\"2.0\"'\n          - '\"openapi\":\"3.'\n          - 'id=\"swagger-ui\"'\n          - 'swagger-ui-bundle.js'\n          - '{\"status\":\"UP\"'\n          - '\"_links\":{\"self\":'\n        condition: or\n"
+      }
+    ]
+  },
+  {
+    "id": "ext-burp-active",
+    "name": "Burp Suite Active Injection & Fuzzing Pack",
+    "version": "2.1.2",
+    "author": "PortSwigger Community Heuristics",
+    "description": "Active canaries inspired by Burp Suite Professional Scanner for SSRF, Directory Traversal, and Command Injection indicators.",
+    "category": "burp",
+    "installed": true,
+    "enabled": true,
+    "templatesCount": 2,
+    "repositoryUrl": "https://portswigger.net/burp/vulnerability-scanner",
+    "templates": [
+      {
+        "id": "ssrf-cloud-metadata-probe",
+        "name": "Cloud Instance Metadata Service (IMDS) Exposure",
+        "severity": "critical",
+        "description": "Tests if proxy parameters or URL handlers forward queries to internal cloud metadata addresses (AWS/GCP/Azure 169.254.169.254).",
+        "tags": [
+          "burp-active",
+          "ssrf",
+          "cloud",
+          "critical"
+        ],
+        "author": "devsecops-auditor",
+        "remediation": "1. Enforce strict outbound URL validation against private, loopback, and link-local IP blocks (RFC 1918, RFC 3927).\n2. Enforce IMDSv2 (Session token requirement) with hop limit = 1 on AWS EC2 instances.\n3. Disable unnecessary proxy forwarding endpoints or require strong API key authentication.",
+        "references": [
+          "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery",
+          "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html"
+        ],
+        "cvssScore": 9.8,
+        "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N",
+        "cweId": "CWE-918",
+        "owaspCategory": "A10:2021-Server-Side Request Forgery (SSRF)",
+        "enabled": true,
+        "isBuiltin": false,
+        "rawYaml": "id: ssrf-cloud-metadata-probe\ninfo:\n  name: Cloud Instance Metadata Service (IMDS) Exposure\n  author: devsecops-auditor\n  severity: critical\n  description: Tests if proxy parameters or URL handlers forward queries to internal cloud metadata addresses (AWS/GCP/Azure 169.254.169.254).\n  reference:\n    - https://owasp.org/www-community/attacks/Server_Side_Request_Forgery\n    - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html\n  tags: burp-active,ssrf,cloud,critical\n  classification:\n    cvss-score: 9.8\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N\n    cwe-id: CWE-918\n    owasp-category: A10:2021-Server-Side Request Forgery (SSRF)\n  remediation: |\n    1. Enforce strict outbound URL validation against private, loopback, and link-local IP blocks (RFC 1918, RFC 3927).\n    2. Enforce IMDSv2 (Session token requirement) with hop limit = 1 on AWS EC2 instances.\n    3. Disable unnecessary proxy forwarding endpoints or require strong API key authentication.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/?url=http://169.254.169.254/latest/meta-data/\"\n      - \"{{BaseURL}}/proxy?target=http://169.254.169.254/latest/meta-data/\"\n    matchers-condition: or\n    matchers:\n      - type: word\n        part: body\n        words:\n          - \"ami-id\"\n          - \"instance-id\"\n          - \"security-credentials\"\n"
+      },
+      {
+        "id": "directory-traversal-canary",
+        "name": "Directory Traversal & Path Manipulation Canary",
+        "severity": "high",
+        "description": "Probes for Local File Inclusion (LFI) and path traversal using safe POSIX /etc/passwd patterns in URL parameters.",
+        "tags": [
+          "burp-active",
+          "lfi",
+          "traversal",
+          "high"
+        ],
+        "author": "devsecops-auditor",
+        "remediation": "1. Use path normalization with path.resolve() and verify the resolved path starts with the allowed base directory.\n2. Avoid passing raw user input directly to filesystem APIs (fs.readFile, open).\n3. Use an indirect map (IDs or keys) instead of actual file path parameters.",
+        "references": [
+          "https://owasp.org/www-community/attacks/Path_Traversal"
+        ],
+        "cvssScore": 7.5,
+        "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+        "cweId": "CWE-22",
+        "owaspCategory": "A01:2021-Broken Access Control",
+        "enabled": true,
+        "isBuiltin": false,
+        "rawYaml": "id: directory-traversal-canary\ninfo:\n  name: Directory Traversal & Path Manipulation Canary\n  author: devsecops-auditor\n  severity: high\n  description: Probes for Local File Inclusion (LFI) and path traversal using safe POSIX /etc/passwd patterns in URL parameters.\n  reference:\n    - https://owasp.org/www-community/attacks/Path_Traversal\n  tags: burp-active,lfi,traversal,high\n  classification:\n    cvss-score: 7.5\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N\n    cwe-id: CWE-22\n    owasp-category: A01:2021-Broken Access Control\n  remediation: |\n    1. Use path normalization with path.resolve() and verify the resolved path starts with the allowed base directory.\n    2. Avoid passing raw user input directly to filesystem APIs (fs.readFile, open).\n    3. Use an indirect map (IDs or keys) instead of actual file path parameters.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/?file=../../../../etc/passwd\"\n      - \"{{BaseURL}}/?page=../../../../etc/passwd\"\n      - \"{{BaseURL}}/?path=../../../../etc/passwd\"\n      - \"{{BaseURL}}/?doc=../../../../etc/passwd\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"root:x:0:0:\"\n          - \"daemon:\"\n          - \"bin/bash\"\n          - \"bin/sh\"\n        condition: or\n"
+      }
+    ]
+  },
+  {
+    "id": "ext-subdomain-takeover",
+    "name": "Subdomain Takeover & CNAME Heuristics",
+    "version": "1.2.0",
+    "author": "EdOverflow & ProjectDiscovery Canaries",
+    "description": "Detects dangling DNS records and orphan CNAME records pointing to unclaimed third-party cloud assets (GitHub, AWS S3, Heroku).",
+    "category": "recon",
+    "installed": true,
+    "enabled": true,
+    "templatesCount": 1,
+    "repositoryUrl": "https://github.com/EdOverflow/can-i-take-over-xyz",
+    "templates": [
+      {
+        "id": "subdomain-takeover-signatures",
+        "name": "Dangling CNAME Cloud Service Fingerprint",
+        "severity": "high",
+        "description": "Checks for known provider error fingerprints indicating the target CNAME points to an unclaimed cloud resource.",
+        "tags": [
+          "takeover",
+          "dns",
+          "subfinder",
+          "recon"
+        ],
+        "author": "devsecops-auditor",
+        "remediation": "1. Delete dangling CNAME records from DNS zone files immediately when decommissioning cloud services.\n2. Claim or reclaim the associated cloud resource name (AWS S3 bucket, GitHub Pages repo, Heroku app) before modifying DNS.",
+        "references": [
+          "https://github.com/EdOverflow/can-i-take-over-xyz"
+        ],
+        "cvssScore": 8.2,
+        "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+        "cweId": "CWE-284",
+        "owaspCategory": "A05:2021-Security Misconfiguration",
+        "enabled": true,
+        "isBuiltin": false,
+        "rawYaml": "id: subdomain-takeover-signatures\ninfo:\n  name: Dangling CNAME Cloud Service Fingerprint\n  author: devsecops-auditor\n  severity: high\n  description: Checks for known provider error fingerprints indicating the target CNAME points to an unclaimed cloud resource.\n  reference:\n    - https://github.com/EdOverflow/can-i-take-over-xyz\n  tags: takeover,dns,subfinder,recon\n  classification:\n    cvss-score: 8.2\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N\n    cwe-id: CWE-284\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: |\n    1. Delete dangling CNAME records from DNS zone files immediately when decommissioning cloud services.\n    2. Claim or reclaim the associated cloud resource name (AWS S3 bucket, GitHub Pages repo, Heroku app) before modifying DNS.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/\"\n    matchers-condition: or\n    matchers:\n      - type: word\n        part: body\n        words:\n          - \"There isn't a GitHub Pages site here\"\n          - \"NoSuchBucket\"\n          - \"The specified bucket does not exist\"\n          - \"No such app\"\n          - \"herokucdn.com\"\n          - \"project not found\"\n          - \"Fastly error: unknown domain\"\n"
+      }
+    ]
+  },
+  {
+    "id": "ext-jwt-security",
+    "name": "JWT & Token Security Verifier",
+    "version": "1.0.5",
+    "author": "DevSecOps Community",
+    "description": "Probes authorization bearer token handling for algorithmic confusion and insecure session practices.",
+    "category": "custom",
+    "installed": false,
+    "enabled": false,
+    "templatesCount": 1,
+    "repositoryUrl": "https://jwt.io",
+    "templates": [
+      {
+        "id": "jwt-none-algorithm-probe",
+        "name": "JWT Algorithm \"none\" Vulnerability Check",
+        "severity": "critical",
+        "description": "Detects authentication bypass when alg=none is passed in JWT header without signature validation.",
+        "tags": [
+          "jwt",
+          "auth",
+          "tokens",
+          "critical"
+        ],
+        "author": "devsecops-auditor",
+        "remediation": "1. Explicitly reject JWT tokens with alg=\"none\" in token verification configuration.\n2. Enforce strict asymmetric (RS256/ES256) or symmetric (HS256) algorithm whitelisting in JWT parser.",
+        "references": [
+          "https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/"
+        ],
+        "cvssScore": 9.8,
+        "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        "cweId": "CWE-287",
+        "owaspCategory": "A07:2021-Identification and Authentication Failures",
+        "enabled": true,
+        "isBuiltin": false,
+        "rawYaml": "id: jwt-none-algorithm-probe\ninfo:\n  name: 'JWT Algorithm \"none\" Vulnerability Check'\n  author: devsecops-auditor\n  severity: critical\n  description: Detects authentication bypass when alg=none is passed in JWT header without signature validation.\n  reference:\n    - https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/\n  tags: jwt,auth,tokens,critical\n  classification:\n    cvss-score: 9.8\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H\n    cwe-id: CWE-287\n    owasp-category: A07:2021-Identification and Authentication Failures\n  remediation: |\n    1. Explicitly reject JWT tokens with alg=\"none\" in token verification configuration.\n    2. Enforce strict asymmetric (RS256/ES256) or symmetric (HS256) algorithm whitelisting in JWT parser.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/api/user\"\n      - \"{{BaseURL}}/api/me\"\n      - \"{{BaseURL}}/api/v1/profile\"\n    headers:\n      Authorization: \"Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhZG1pbiIsImFkbWluIjp0cnVlfQ.\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"admin\"\n"
+      }
+    ]
+  }
+]

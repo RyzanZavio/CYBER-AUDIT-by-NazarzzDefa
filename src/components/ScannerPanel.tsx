@@ -67,7 +67,7 @@ export const ScannerPanel: React.FC<ScannerPanelProps> = ({
   }, [isScanning, onCancelScan]);
 
   const presets = [
-    { label: 'smkn3kotabekasi.sch.id (Audit Target)', url: 'https://smkn3kotabekasi.sch.id' },
+    { label: 'example.com (Audit Target)', url: 'https://example.com' },
     { label: 'Local Dev App (Port 3000)', url: 'http://localhost:3000' },
     { label: 'OWASP Official Portal', url: 'https://owasp.org' },
     { label: 'Httpbin Testbed', url: 'https://httpbin.org' },

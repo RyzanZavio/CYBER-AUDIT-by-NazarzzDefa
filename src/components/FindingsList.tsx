@@ -75,7 +75,7 @@ const SERVER_CONFIGS: Record<ServerType, { label: string; code: string; filename
     code: `# === OWASP Security Hardening Headers for Nginx ===
 server {
     listen 443 ssl http2;
-    server_name smkn3kotabekasi.sch.id;
+    server_name example.com;
 
     # 1. Content Security Policy (Mitigate XSS & Data Injections)
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' https:; frame-ancestors 'self';" always;

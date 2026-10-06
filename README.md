@@ -164,7 +164,7 @@ Eksekusi pemindai dapat dilakukan via skrip Python `python3 cyber_audit.py` atau
 
 | Parameter Pendek | Parameter Panjang | Nilai / Format | Penjelasan & Fungsi |
 | :--- | :--- | :--- | :--- |
-| `-u` | `--url` | `<URL>` | Menentukan URL target tunggal yang akan diaudit (contoh: `https://smkn3kotabekasi.sch.id`). |
+| `-u` | `--url` | `<URL>` | Menentukan URL target tunggal yang akan diaudit (contoh: `https://example.com`). |
 | `-l` | `--list` | `<FILE_PATH>` | Membaca daftar target subdomain/URL dari berkas teks (satu target per baris). |
 | `-p` | `--severity` | `critical`, `high`, `medium`, `low`, `info`, `all` | Menyaring temuan berdasarkan batas ambang keparahan minimal (Default: `all`). |
 | `-x` | `--proxy` | `<PROXY_URL>` | Merutekan seluruh request HTTP/HTTPS melalui upstream proxy (contoh: `http://127.0.0.1:8080` untuk Burp Suite Pro atau `socks5://127.0.0.1:9050` untuk Tor). |
@@ -179,7 +179,7 @@ Eksekusi pemindai dapat dilakukan via skrip Python `python3 cyber_audit.py` atau
 
 #### 1. Audit Target Tunggal Sederhana
 ```bash
-python3 cyber_audit.py -u https://smkn3kotabekasi.sch.id
+python3 cyber_audit.py -u https://example.com
 ```
 
 #### 2. Audit Hanya Temuan High & Critical Melalui Proxy Burp Suite Pro

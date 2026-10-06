@@ -70,7 +70,7 @@ export const WorkbenchView: React.FC<WorkbenchViewProps> = ({
   onClearLogs,
 }) => {
   // Input Target State
-  const [targetInput, setTargetInput] = useState('https://smkn3kotabekasi.sch.id');
+  const [targetInput, setTargetInput] = useState('https://example.com');
   const [scanPreset, setScanPreset] = useState<'quick' | 'deep' | 'passive'>('quick');
   const [concurrency, setConcurrency] = useState(10);
   const [timeoutMs, setTimeoutMs] = useState(5000);

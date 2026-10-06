@@ -1,0 +1,33 @@
+{
+  "webhook": {
+    "type": "discord",
+    "url": "",
+    "enabled": false,
+    "minSeverity": "medium",
+    "channelName": "#security-alerts"
+  },
+  "proxy": {
+    "enabled": false,
+    "url": "http://127.0.0.1:8080",
+    "insecureSkipVerify": true,
+    "customUserAgent": "Mozilla/5.0 (compatible; DevSecOps-Auditor/2.4; +https://owasp.org)"
+  },
+  "schedule": {
+    "enabled": true,
+    "timeString": "02:00",
+    "cronExpression": "0 2 * * *",
+    "targetUrl": "https://example.com",
+    "allowInternal": false,
+    "selectedTemplateIds": [
+      "owasp-security-headers",
+      "exposed-env-credentials",
+      "cors-misconfiguration",
+      "cookie-security-flags",
+      "server-version-disclosure"
+    ],
+    "notifyWebhook": true,
+    "status": "idle",
+    "lastStatus": "Initialized daily scan at 02:00 AM UTC"
+  },
+  "savedAt": "2026-10-06T09:45:57.052Z"
+}
