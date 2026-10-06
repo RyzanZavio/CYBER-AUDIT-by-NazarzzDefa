@@ -1,0 +1,136 @@
+{
+  "Content-Security-Policy": {
+    "severity": "medium",
+    "remediation": "Add 'Content-Security-Policy: default-src \\'self\\'; script-src \\'self\\' https:;' header.",
+    "description": "Protects against Cross-Site Scripting (XSS) and data injection attacks.",
+    "cvss": null
+  },
+  "X-Frame-Options": {
+    "severity": "medium",
+    "remediation": "Add 'X-Frame-Options: SAMEORIGIN' header.",
+    "description": "Protects against Clickjacking attacks by forbidding iframe framing.",
+    "cvss": null
+  },
+  "X-Content-Type-Options": {
+    "severity": "low",
+    "remediation": "Add 'X-Content-Type-Options: nosniff' header.",
+    "description": "Prevents MIME-sniffing attacks.",
+    "cvss": null
+  },
+  "Strict-Transport-Security": {
+    "severity": "medium",
+    "remediation": "Add 'Strict-Transport-Security: max-age=31536000; includeSubDomains; preload' header.",
+    "description": "Enforces HTTPS connections (HSTS).",
+    "cvss": null
+  },
+  "Referrer-Policy": {
+    "severity": "low",
+    "remediation": "Add 'Referrer-Policy: strict-origin-when-cross-origin' header.",
+    "description": "Governs how much referrer information should be included with requests.",
+    "cvss": null
+  },
+  "Permissions-Policy": {
+    "severity": "low",
+    "remediation": "Add 'Permissions-Policy: camera=(), microphone=(), geolocation=()' header.",
+    "description": "Restricts browser features like camera, microphone, and geolocation.",
+    "cvss": null
+  },
+  "Environment Config (.env) Exposure": {
+    "severity": "critical",
+    "remediation": "Block access to hidden files (.*) and move configuration files outside web root.",
+    "description": null,
+    "cvss": 9.8
+  },
+  "Git Repository Metadata Exposure (.git/config)": {
+    "severity": "high",
+    "remediation": "Deny web server access to .git directories.",
+    "description": null,
+    "cvss": 7.5
+  },
+  "Exposed Spring Boot Actuator Endpoint": {
+    "severity": "high",
+    "remediation": "Set management.endpoints.web.exposure.exclude=* or bind actuator to localhost.",
+    "description": null,
+    "cvss": 7.5
+  },
+  "Swagger / OpenAPI UI Public Exposure": {
+    "severity": "info",
+    "remediation": "Restrict API documentation to authenticated developers.",
+    "description": null,
+    "cvss": 0.0
+  },
+  "Exposed Database & Source Code Backup Dumps": {
+    "severity": "high",
+    "remediation": "Delete public backup archives and configure web server to deny access to .sql, .tar.gz, .zip, and .bak files.",
+    "description": null,
+    "cvss": 8.5
+  },
+  "Robots.txt Sensitive Endpoint Information Leak": {
+    "severity": "info",
+    "remediation": "Do not rely on robots.txt for security. Protect private administration endpoints using proper authorization gates.",
+    "description": null,
+    "cvss": 0.0
+  },
+  "Apache HTTP Server 2.4.49 Path Traversal (CVE-2021-41773)": {
+    "severity": "critical",
+    "remediation": "Upgrade Apache HTTP Server to version 2.4.51 or later.",
+    "description": null,
+    "cvss": 9.8
+  },
+  "Grafana 8.x Directory Traversal (CVE-2021-43798)": {
+    "severity": "high",
+    "remediation": "Upgrade Grafana to version 8.3.1 or newer.",
+    "description": null,
+    "cvss": 8.6
+  },
+  "JetBrains TeamCity Auth Bypass (CVE-2024-27198)": {
+    "severity": "critical",
+    "remediation": "Upgrade TeamCity to version 2023.11.4 or install security patch plugin.",
+    "description": null,
+    "cvss": 9.8
+  },
+  "ScreenConnect SetupWizard Auth Bypass (CVE-2024-1709)": {
+    "severity": "critical",
+    "remediation": "Upgrade ConnectWise ScreenConnect to version 23.9.8 or higher.",
+    "description": null,
+    "cvss": 10.0
+  },
+  "MinIO Information Disclosure & Secret Leak (CVE-2023-28432)": {
+    "severity": "high",
+    "remediation": "Upgrade MinIO to RELEASE.2023-03-20T20-16-18Z or newer.",
+    "description": null,
+    "cvss": 7.5
+  },
+  "F5 BIG-IP TMUI Path Traversal (CVE-2020-5902)": {
+    "severity": "critical",
+    "remediation": "Apply F5 security hotfixes or restrict TMUI access.",
+    "description": null,
+    "cvss": 9.8
+  },
+  "Oracle WebLogic Console Path Traversal (CVE-2020-14882)": {
+    "severity": "critical",
+    "remediation": "Apply Oracle Critical Patch Update or block /console access.",
+    "description": null,
+    "cvss": 9.8
+  },
+  "Palo Alto PAN-OS Auth Bypass (CVE-2025-0108)": {
+    "severity": "critical",
+    "remediation": "Upgrade PAN-OS to 11.2.3, 11.1.4, or 10.2.11.",
+    "description": null,
+    "cvss": 9.8
+  },
+  "Ollama LLM Framework Unauthenticated API Exposure (CVE-2026-2180)": {
+    "severity": "critical",
+    "remediation": "Bind Ollama to 127.0.0.1 or enforce mTLS reverse proxy authentication.",
+    "description": null,
+    "cvss": 9.8
+  },
+  "Missing OWASP HTTP Security Headers": {
+    "severity": "medium"
+  },
+  "_aliases": {
+    "Missing Defensive HTTP Security Headers": "Missing OWASP HTTP Security Headers",
+    "Exposed Environment (.env) Credentials": "Environment Config (.env) Exposure",
+    "Exposed Git Repository (.git/HEAD)": "Git Repository Metadata Exposure (.git/config)"
+  }
+}

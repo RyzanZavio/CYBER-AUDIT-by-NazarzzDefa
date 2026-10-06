@@ -61,11 +61,22 @@ Pilih salah satu lingkungan yang paling nyaman untuk Anda:
 Salin repositori ke direktori kerja lokal Anda:
 
 ```bash
-git clone https://github.com/rayzanzavio/cyber-audit.git
-cd cyber-audit
+git clone https://github.com/RyzanZavio/CYBER-AUDIT-by-NazarzzDefa.git
+cd CYBER-AUDIT-by-NazarzzDefa
 ```
 
 ### 2. Pemasangan Dependensi
+
+> **Untuk pengguna Kali Linux / Debian / WSL:** Python di sistem ini dikelola OS (PEP 668), jadi `pip install` langsung akan error `externally-managed-environment`. Gunakan virtual environment:
+>
+> ```bash
+> python3 -m venv venv
+> source venv/bin/activate
+> pip install -r requirements.txt
+> ```
+> Setiap kali ingin memakai tools, aktifkan dulu dengan `source venv/bin/activate`.
+>
+> **Catatan WSL:** pastikan `node`/`npm` yang terpanggil adalah versi Linux (`which npm`), bukan npm dari Windows — memanggil npm Windows di WSL menyebabkan error `UNC paths are not supported`.
 
 Pilihlah salah satu cara termudah berikut untuk memasang dependensi tanpa kerumitan:
 
@@ -243,6 +254,24 @@ python3 cyber_audit.py -l targets.txt -x socks5://127.0.0.1:9050 --timeout 15 -o
     └── utils/
         ├── pdfGenerator.ts   # Dynamic Localized PDF Layout Engine
         └── reportLocales.ts  # Kamus Lokalisasi Laporan (ID & EN)
+```
+
+---
+
+## Troubleshooting
+
+**`error: externally-managed-environment` saat `make install` / `pip install`:**
+Gunakan virtual environment (`python3 -m venv venv && source venv/bin/activate`), atau tambahkan flag `--break-system-packages` (tidak direkomendasikan).
+
+**Error `UNC paths are not supported` saat setup di WSL:**
+Itu terjadi karena `npm` yang terpanggil adalah npm milik Windows. Pastikan memakai Node.js Linux di WSL (`which npm`), atau jalankan setup di terminal PowerShell Windows biasa.
+
+**Error `webidl.util.markAsUncloneable is not a function` saat `cyber-audit-web`:**
+Versi `undici` bentrok dengan Node.js. Perbarui dependensi:
+```bash
+npm install undici@latest --legacy-peer-deps
+# atau install ulang total:
+rm -rf node_modules package-lock.json && npm install --legacy-peer-deps
 ```
 
 ---

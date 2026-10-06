@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { ProxyAgent } from 'undici';
 import { validateTargetUrl } from './ssrf-validator';
@@ -996,6 +998,28 @@ export async function executeVulnerabilityScan(
       'info',
       `Audit completed in ${(durationMs / 1000).toFixed(1)}s. Executed ${templatesExecuted} templates with ${threads} concurrent threads, sent ${requestsSent} requests. Consolidated ${postProcessedFindings.length} root finding(s).`
     );
+  }
+
+  // Sync severities with rules.json (shared with cyber_audit.py)
+  try {
+    const rulesPath = path.join(process.cwd(), 'rules.json');
+    if (fs.existsSync(rulesPath)) {
+      const sharedRules = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
+      const aliases = sharedRules['_aliases'] || {};
+      const lookup = (name: string) => sharedRules[name] || sharedRules[aliases[name]];
+      for (const f of postProcessedFindings) {
+        const r = lookup(f.name);
+        if (r?.severity) f.severity = r.severity as VulnerabilitySeverity;
+        if (Array.isArray(f.subFindings)) {
+          for (const s of f.subFindings) {
+            const sr = lookup(s.name);
+            if (sr?.severity) s.severity = sr.severity as VulnerabilitySeverity;
+          }
+        }
+      }
+    }
+  } catch {
+    /* rules.json optional; keep inline severities */
   }
 
   return {

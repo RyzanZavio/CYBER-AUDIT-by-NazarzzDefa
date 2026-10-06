@@ -298,6 +298,22 @@ PROBES = [
 ]
 
 
+# Shared rule overrides: canonical severities/remediations live in rules.json so the
+# Web engine (server/scanner.ts) and this CLI stay in sync.
+try:
+    _RULES = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rules.json'), encoding='utf-8'))
+    for _coll in (SECURITY_HEADERS, PROBES):
+        for _item in _coll:
+            _r = _RULES.get(_item.get('name'))
+            if _r:
+                if _r.get('severity'):
+                    _item['severity'] = _r['severity']
+                if _r.get('remediation'):
+                    _item['remediation'] = _r['remediation']
+except Exception:
+    pass
+
+
 def normalize_target(url: str) -> str:
     url = url.strip()
     if not url.startswith("http://") and not url.startswith("https://"):
